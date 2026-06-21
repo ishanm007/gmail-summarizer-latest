@@ -1,0 +1,118 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Plan {
+  FREE
+  PRO
+  PRO_PLUS
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  plan      Plan     @default(FREE)
+  refreshToken String?
+  accessToken  String?
+  accounts Account[]
+  aiConsent Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  emailSummaries EmailSummary[]
+  dailyUsages    DailyUsage[]
+  profile        UserProfile?
+}
+
+model UserProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+
+  role      String   @default("NOT_SET")
+  roleLabel String?
+
+  organizationName String?
+  businessName     String?
+
+  priorities           String @default("[]")
+  newsletterPreference String @default("PERSONAL")
+
+  workDomains       String @default("[]")
+  studyDomains      String @default("[]")
+  newsletterDomains String @default("[]")
+  ignoredDomains    String @default("[]")
+
+  onboardingCompleted Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id                String   @id @default(cuid())
+  userId            String
+  provider          String
+  providerAccountId String
+  accessToken       String?
+  refreshToken      String?
+  scope             String?
+  tokenType         String?
+  expiryDate        BigInt?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @default(now()) @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model EmailSummary {
+  id             String   @id @default(cuid())
+  userId         String
+  gmailMessageId String
+
+  from     String
+  subject  String
+  snippet  String
+  summary  String
+  category String?
+  urgency  String?
+  date     String?
+
+  actionItems      String?
+  keyDates         String?
+  keyTakeaways     String?
+  importantDetails String?
+  keyNumbers       String?
+  people           String?
+  companies        String?
+  links            String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gmailMessageId])
+}
+
+model DailyUsage {
+  id     String @id @default(cuid())
+  userId String
+  date   String
+  count  Int    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+}

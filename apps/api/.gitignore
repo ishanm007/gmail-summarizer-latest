@@ -1,0 +1,14 @@
+node_modules/
+
+.env
+.env.local
+src/.env.local
+
+tokens.json
+
+dist/
+
+/src/generated/prisma
+
+*.db
+*.db-journal
