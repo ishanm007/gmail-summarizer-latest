@@ -15,7 +15,7 @@ export async function findSavedSummary(
 }
 
 function stringifyArray(value?: string[]) {
-  return JSON.stringify(value || []);
+  return JSON.stringify(Array.isArray(value) ? value : []);
 }
 
 function normalizeCategory(category?: string) {
@@ -59,6 +59,9 @@ export async function saveEmailSummary(data: {
   overview?: string;
   summary: string;
 
+  // IMPORTANT:
+  // This must come from the email-list/category pipeline whenever available.
+  // Do not let the summary panel silently re-classify into a different tag.
   category: string;
 
   actionItems?: string[];
@@ -77,6 +80,8 @@ export async function saveEmailSummary(data: {
   sentiment?: string;
   date?: string | null;
 }) {
+  const priorityLevel = normalizePriority(data.priorityLevel);
+
   const payload = {
     from: data.from,
     subject: data.subject,
@@ -86,7 +91,7 @@ export async function saveEmailSummary(data: {
     overview: data.overview ?? null,
     summary: data.summary,
 
-    category: normalizeCategory(data.category) as any,
+    category: normalizeCategory(data.category),
 
     actionItems: stringifyArray(data.actionItems),
     keyDates: stringifyArray(data.keyDates),
@@ -97,7 +102,9 @@ export async function saveEmailSummary(data: {
     companies: stringifyArray(data.companies),
     links: stringifyArray(data.links),
 
-    priorityLevel: normalizePriority(data.priorityLevel) as any,
+    priorityLevel,
+    // Keep old UI/backend compatibility because some files still read `urgency`.
+    urgency: priorityLevel,
     priorityReason: data.priorityReason ?? null,
     whyReceived: data.whyReceived ?? null,
 

@@ -76,6 +76,8 @@ type Usage = {
 type User = {
   id: string;
   email: string;
+  name?: string | null;
+  picture?: string | null;
   plan?: string;
   aiConsent?: boolean;
 };
@@ -368,6 +370,14 @@ export default function Home() {
     return "bg-orange-500/10 text-orange-300 border-orange-500/30";
   }
 
+  function getUserDisplayName() {
+    return user?.name?.trim() || user?.email?.split("@")[0] || "User";
+  }
+
+  function getSelectedCategory() {
+    return selectedEmail?.category || selectedSummary?.category || "PERSONAL";
+  }
+
   async function safeJson(res: Response) {
     const contentType = res.headers.get("content-type");
 
@@ -563,38 +573,55 @@ export default function Home() {
   }
 
   async function handleOnboardingNext() {
-    setSavingOnboarding(true);
     setErrorMessage("");
 
     try {
       if (onboardingStep === "role") {
         setOnboardingStep("details");
-      } else if (onboardingStep === "details") {
-        await saveBasicOnboarding(false);
-        setOnboardingStep("priorities");
-      } else if (onboardingStep === "priorities") {
-        await saveBasicOnboarding(false);
-        await fetchDomainSuggestions();
-        setOnboardingStep("domains");
-      } else {
-        const labels = Object.entries(domainLabels).map(([domain, type]) => ({
-          domain,
-          type,
-        }));
-
-        const labelsRes = await apiFetch(`${API_BASE}/onboarding/domain-labels`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ labels }),
-        });
-
-        await safeJson(labelsRes);
-        await saveBasicOnboarding(true);
-        await fetchOnboardingProfile();
-        showSuccess("Your AI inbox profile is ready.");
+        return;
       }
+
+      if (onboardingStep === "details") {
+        setOnboardingStep("priorities");
+        saveBasicOnboarding(false).catch((error) => {
+          console.error(error);
+          setErrorMessage("Failed to save onboarding context.");
+        });
+        return;
+      }
+
+      if (onboardingStep === "priorities") {
+        setOnboardingStep("domains");
+
+        Promise.all([saveBasicOnboarding(false), fetchDomainSuggestions()]).catch(
+          (error) => {
+            console.error(error);
+            setErrorMessage("Failed to prepare domain suggestions.");
+          },
+        );
+
+        return;
+      }
+
+      setSavingOnboarding(true);
+
+      const labels = Object.entries(domainLabels).map(([domain, type]) => ({
+        domain,
+        type,
+      }));
+
+      const labelsRes = await apiFetch(`${API_BASE}/onboarding/domain-labels`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ labels }),
+      });
+
+      await safeJson(labelsRes);
+      const savedProfile = await saveBasicOnboarding(true);
+      setProfile(savedProfile);
+      showSuccess("Your AI inbox profile is ready.");
     } catch (error) {
       console.error(error);
       setErrorMessage("Failed to save onboarding. Please check backend routes.");
@@ -688,7 +715,12 @@ export default function Home() {
         setPeople(data.people || []);
         setCompanies(data.companies || []);
         setLinks(data.links || []);
-        setUrgency(normalizeUrgencyForCategory(data.category || email.category, data.urgency));
+        const finalCategory = email.category || data.category || "PERSONAL";
+        const finalUrgency = normalizeUrgencyForCategory(
+          finalCategory,
+          data.priorityLevel || data.urgency || email.priorityLevel || email.urgency,
+        );
+        setUrgency(finalUrgency);
         setErrorMessage("");
 
         setEmails((prev) =>
@@ -698,8 +730,8 @@ export default function Home() {
                   ...item,
                   hasSummary: true,
                   savedSummary: data.summary,
-                  category: data.category || item.category,
-                  urgency: normalizeUrgencyForCategory(data.category || item.category, data.urgency),
+                  category: item.category || data.category,
+                  urgency: finalUrgency,
                 }
               : item,
           ),
@@ -1291,7 +1323,7 @@ export default function Home() {
             <div>
               <h1 className="text-lg font-black tracking-tight">Gmail Summarizer</h1>
               <p className="mt-1 font-mono text-sm tracking-[0.25em] text-indigo-400">
-                v3.4 · active
+                v1.1 · active
               </p>
             </div>
           </div>
@@ -1397,13 +1429,21 @@ export default function Home() {
             </div>
 
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-violet-600 font-black">
-                {user.email.slice(0, 2).toUpperCase()}
-              </div>
+              {user.picture ? (
+                <img
+                  src={user.picture}
+                  alt={getUserDisplayName()}
+                  className="h-12 w-12 rounded-full border border-indigo-400/30 object-cover"
+                />
+              ) : (
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-violet-600 font-black">
+                  {getUserDisplayName().slice(0, 2).toUpperCase()}
+                </div>
+              )}
 
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold">{user.email}</p>
-                <p className="text-xs text-indigo-300/70">Signed in</p>
+                <p className="truncate text-sm font-bold">{getUserDisplayName()}</p>
+                <p className="truncate text-xs text-indigo-300/70">{user.email}</p>
               </div>
 
               <button
@@ -1822,9 +1862,7 @@ export default function Home() {
 
                   <div className="mt-3 flex flex-wrap gap-2">
                     <p className="inline-flex rounded-full bg-indigo-500/10 px-3 py-1 text-xs text-indigo-100/70">
-                      {getCategoryLabel(
-                        selectedEmail?.category || selectedSummary?.category,
-                      )}
+                      {getCategoryLabel(getSelectedCategory())}
                     </p>
 
                     <p
@@ -1840,7 +1878,7 @@ export default function Home() {
                     <h3 className="mb-3 font-semibold">📝 Summary</h3>
 
                     {summaryLoading ? (
-                      <p className="text-indigo-100/70">Generating summary...</p>
+                      <p className="text-indigo-100/70">Generating summary... cached summaries open instantly.</p>
                     ) : (
                       <p className="whitespace-pre-wrap text-indigo-100">
                         {summary}

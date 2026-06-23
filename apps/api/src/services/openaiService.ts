@@ -93,13 +93,13 @@ Return only one uppercase category.
 const RICH_SUMMARY_SYSTEM_PROMPT = `
 You are an elite executive email assistant.
 
-Your job is NOT to merely shorten the email. Your job is to extract the useful information from the email and explain it clearly.
+Your job is NOT to classify the email. The backend has already chosen the category and urgency using deterministic rules.
+Your only job is to extract the useful information from the email and explain it clearly.
 
 Return ONLY valid JSON using this exact schema:
 
 {
-  "category": "WORK | SHOPPING | FINANCE | PROMOTIONS | PERSONAL | SPAM | ATTENTION_NEEDED",
-  "summary": "A useful 80-180 word summary when the email has enough content. Shorter is allowed only for tiny emails.",
+  "summary": "A useful 70-150 word summary when the email has enough content. Shorter is allowed only for tiny emails.",
   "keyTakeaways": ["Main point 1", "Main point 2"],
   "importantDetails": ["Specific detail user should not miss"],
   "actionItems": ["Specific task the user should do"],
@@ -107,21 +107,18 @@ Return ONLY valid JSON using this exact schema:
   "keyNumbers": ["Money, percentages, quantities, IDs, balances, transaction amounts"],
   "people": ["People mentioned"],
   "companies": ["Companies, institutions, apps, or organizations mentioned"],
-  "links": ["Important links if present"],
-  "urgency": "LOW | MEDIUM | HIGH"
+  "links": ["Important links if present"]
 }
 
 Summary quality rules:
+- Do NOT output category, urgency, priority, sentiment, or tags.
 - Explain what the email actually says. Do not write generic filler like "This email appears to be a newsletter" or "The email discusses".
 - Pull out concrete facts, names, amounts, dates, deadlines, transaction IDs, places, policy changes, offers, warnings, and next steps.
 - If the email is a newsletter/article, summarize the actual article/news content and its main points.
 - If the email is transactional, include amount, sender/receiver, status, ID, balance, and date/time if available.
-- If the email is promotional, include the offer, discount, deadline, eligibility, product/service, and any limitation.
+- If the email is promotional, include the offer, discount, deadline, eligibility, product/service, and limitations.
 - If the email is work-related, include who needs what, deadline, meeting/project details, and required response.
 - Never invent missing facts. Empty arrays are okay.
-- Spam and Promotions must always have LOW urgency.
-- A normal newsletter/digest/blog/Medium/Substack/article briefing should be PERSONAL with LOW urgency, not SPAM or PROMOTIONS, unless it is mainly selling offers/discounts or has clear scam/phishing indicators.
-- HIGH urgency only for real deadlines, security/account issues, failed payment, legal/tax/government action, or work escalation. Never mark newsletters/digests/articles as MEDIUM or HIGH urgency.
 - Output JSON only. No markdown.
 `;
 
@@ -724,8 +721,13 @@ function buildFallbackRichSummary(email: BasicEmail, category: EmailCategory) {
 }
 
 export async function summarizeAndClassifyEmail(email: BasicEmail, profile?: UserProfileContext) {
+  // IMPORTANT: GPT is no longer allowed to decide category or urgency here.
+  // The email-list rule engine is the single source of truth for tags.
+  // This prevents mismatches like: Email List = FINANCE, AI Summary = PERSONAL.
   const ruleHit = classifyByRules(email, profile);
-  const contentForAi = getContentForAi(email);
+  const category: EmailCategory = ruleHit.category;
+  const urgency: EmailUrgency = calculateUrgencyByRules(email, category, profile);
+  const contentForAi = getContentForAi(email).slice(0, 5500);
 
   try {
     const completion = await client.chat.completions.create({
@@ -736,10 +738,10 @@ export async function summarizeAndClassifyEmail(email: BasicEmail, profile?: Use
           role: "user",
           content: `${buildUserProfilePrompt(profile)}
 
-Rule engine suggestion:
-Category: ${ruleHit.category}
-Confidence: ${ruleHit.confidence}
-Reason: ${ruleHit.reason}
+Backend-selected metadata. Use this only as context. Do not change it and do not output it:
+Category: ${category}
+Urgency: ${urgency}
+Rule reason: ${ruleHit.reason}
 
 Email metadata:
 From: ${email.from}
@@ -750,7 +752,7 @@ Full email content:
 ${contentForAi}`,
         },
       ],
-      max_tokens: 1200,
+      max_tokens: 550,
       temperature: 0,
       response_format: { type: "json_object" },
     });
@@ -758,7 +760,6 @@ ${contentForAi}`,
     const raw = completion.choices[0].message.content || "";
     const parsed = parseJsonObject(raw);
 
-    let category: EmailCategory = ruleHit.category;
     let summary = cleanSummaryText(raw, raw) || "No useful summary could be generated.";
     let actionItems: string[] = [];
     let keyDates: string[] = [];
@@ -768,11 +769,11 @@ ${contentForAi}`,
     let people: string[] = [];
     let companies: string[] = [];
     let links: string[] = [];
-    let urgency: EmailUrgency = calculateUrgencyByRules(email, category, profile);
 
     if (parsed) {
-      if (typeof parsed.category === "string") category = chooseFinalCategory(normalizeCategory(parsed.category), ruleHit);
-      if (typeof parsed.summary === "string" && parsed.summary.trim()) summary = cleanSummaryText(parsed.summary, raw);
+      if (typeof parsed.summary === "string" && parsed.summary.trim()) {
+        summary = cleanSummaryText(parsed.summary, raw);
+      }
 
       actionItems = normalizeStringArray(parsed.actionItems);
       keyDates = normalizeStringArray(parsed.keyDates);
@@ -782,15 +783,7 @@ ${contentForAi}`,
       people = normalizeStringArray(parsed.people);
       companies = normalizeStringArray(parsed.companies);
       links = normalizeStringArray(parsed.links);
-      urgency = normalizeUrgency(parsed.urgency);
     }
-
-    const ruleUrgency = calculateUrgencyByRules(email, category, profile);
-
-    if (category === "SPAM" || category === "PROMOTIONS" || isNewsletterEmail(email)) urgency = "LOW";
-    else if (ruleUrgency === "HIGH") urgency = "HIGH";
-    else if (urgency === "HIGH") urgency = ruleUrgency;
-    else urgency = ruleUrgency;
 
     return {
       summary,
@@ -807,7 +800,7 @@ ${contentForAi}`,
     };
   } catch (error) {
     console.error("[Rich Summary Error]", error);
-    return buildFallbackRichSummary(email, ruleHit.category);
+    return buildFallbackRichSummary(email, category);
   }
 }
 

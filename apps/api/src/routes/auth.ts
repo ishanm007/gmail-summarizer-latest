@@ -9,6 +9,7 @@ const router = express.Router();
 
 const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/userinfo.email",
+  "https://www.googleapis.com/auth/userinfo.profile",
 
   // Allows reading + modifying Gmail messages.
   // Needed for archiving/removing blocked newsletter emails from Inbox.
@@ -55,6 +56,8 @@ router.get("/google/callback", async (req, res) => {
 
     const email = userInfo.data.email!;
     const providerAccountId = userInfo.data.id || email;
+    const name = userInfo.data.name || userInfo.data.given_name || null;
+    const picture = userInfo.data.picture || null;
 
     let aiConsent = false;
     try {
@@ -67,11 +70,13 @@ router.get("/google/callback", async (req, res) => {
       // ignore invalid state
     }
 
-    const user = await upsertUser(
+    const user = await upsertUser({
       email,
-      tokens.refresh_token || undefined,
+      refreshToken: tokens.refresh_token || undefined,
       aiConsent,
-    );
+      name,
+      picture,
+    });
 
     await upsertAccount({
       userId: user.id,
@@ -88,7 +93,7 @@ router.get("/google/callback", async (req, res) => {
       maxAge: 1000 * 60 * 60 * 24 * 30,
     });
 
-    res.redirect("http://localhost:3000");
+    res.redirect(process.env.FRONTEND_URL || "http://localhost:3000");
   } catch (error) {
     console.error("AUTH ERROR:", error);
 
@@ -111,6 +116,8 @@ router.get("/me", async (req, res) => {
       user: {
         id: user.id,
         email: user.email,
+        name: (user as any).name || null,
+        picture: (user as any).picture || null,
         aiConsent: (user as any).aiConsent,
         plan: user.plan,
       },

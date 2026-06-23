@@ -31,6 +31,8 @@ type Email = {
   snippet: string;
   date?: string;
   category?: EmailCategory;
+  urgency?: string;
+  priorityLevel?: string;
 };
 
 function formatGmailDate(date: Date) {
@@ -227,52 +229,80 @@ function buildCachedSummaryResponse(existingSummary: any) {
     people: parseSavedArray(existingSummary.people),
     companies: parseSavedArray(existingSummary.companies),
     links: parseSavedArray(existingSummary.links),
-    urgency: normalizeStoredUrgency(existingSummary.category, existingSummary.urgency, existingSummary),
+    urgency: normalizeStoredUrgency(
+      existingSummary.category,
+      existingSummary.priorityLevel || existingSummary.urgency,
+      existingSummary,
+    ),
+    priorityLevel: normalizeStoredUrgency(
+      existingSummary.category,
+      existingSummary.priorityLevel || existingSummary.urgency,
+      existingSummary,
+    ),
   };
 }
 
 async function attachSummaryData(userId: string, emails: Email[]) {
-  const userProfile = await getUserProfileContext(userId);
-
+  // Performance rule:
+  // Do NOT call OpenAI while loading the inbox list.
+  // The list should only attach cached summary info and keep the category that
+  // was already computed by the Gmail/list pipeline. This keeps initial load fast
+  // and prevents tag mismatch between the list and the AI summary panel.
   return Promise.all(
     emails.map(async (email) => {
       try {
         const savedSummary = await findSavedSummary(userId, email.id);
-        let category: EmailCategory = "PERSONAL";
 
-        try {
-          category = await classifyEmailCategory(email, userProfile);
-          console.log(`[Classification] ${email.subject} -> ${category}`);
-        } catch (error) {
-          console.error(`[Classification Error] ${email.subject}:`, error);
-          category = (savedSummary?.category as EmailCategory) || "PERSONAL";
-        }
+        const listCategory =
+          (email.category as EmailCategory | undefined) ||
+          (savedSummary?.category as EmailCategory | undefined) ||
+          "PERSONAL";
 
-        if (savedSummary) {
-          const correctedUrgency = normalizeStoredUrgency(category, savedSummary.urgency, {
-            ...email,
-            summary: savedSummary.summary,
-          });
+        const listUrgency =
+          email.priorityLevel ||
+          email.urgency ||
+          savedSummary?.priorityLevel ||
+          savedSummary?.urgency ||
+          "LOW";
 
-          if (savedSummary.category !== category || savedSummary.urgency !== correctedUrgency) {
-            try {
-              const { prisma } = await import("../lib/prisma");
-              await prisma.emailSummary.update({
-                where: { id: savedSummary.id },
-                data: {
-                  category,
-                  urgency: correctedUrgency,
-                },
-              });
-            } catch (error) {
-              console.error(`[Saved Category/Urgency Update Error] ${email.subject}:`, error);
-            }
+        if (
+          savedSummary &&
+          (savedSummary.category !== listCategory ||
+            savedSummary.priorityLevel !== listUrgency ||
+            savedSummary.urgency !== listUrgency)
+        ) {
+          try {
+            const { prisma } = await import("../lib/prisma");
+            await prisma.emailSummary.update({
+              where: { id: savedSummary.id },
+              data: {
+                category: listCategory,
+                priorityLevel: normalizeStoredUrgency(listCategory, listUrgency, {
+                  ...email,
+                  summary: savedSummary.summary,
+                }),
+                urgency: normalizeStoredUrgency(listCategory, listUrgency, {
+                  ...email,
+                  summary: savedSummary.summary,
+                }),
+              },
+            });
+          } catch (error) {
+            console.error(`[Saved Category/Urgency Sync Error] ${email.subject}:`, error);
           }
         }
 
         return {
           ...email,
-          category,
+          category: listCategory,
+          urgency: normalizeStoredUrgency(listCategory, listUrgency, {
+            ...email,
+            summary: savedSummary?.summary,
+          }),
+          priorityLevel: normalizeStoredUrgency(listCategory, listUrgency, {
+            ...email,
+            summary: savedSummary?.summary,
+          }),
           hasSummary: Boolean(savedSummary),
           savedSummary: savedSummary?.summary ? cleanStoredSummary(savedSummary.summary) : null,
         };
@@ -280,7 +310,9 @@ async function attachSummaryData(userId: string, emails: Email[]) {
         console.error(`[attachSummaryData Error] ${email.subject}:`, error);
         return {
           ...email,
-          category: "PERSONAL",
+          category: email.category || "PERSONAL",
+          urgency: email.urgency || email.priorityLevel || "LOW",
+          priorityLevel: email.priorityLevel || email.urgency || "LOW",
           hasSummary: false,
           savedSummary: null,
         };
@@ -450,29 +482,41 @@ router.post("/email/summary", async (req, res) => {
 
     const userProfile = await getUserProfileContext(user.id);
 
+    // Use the exact category/priority already shown in the email list.
+    // This fixes the mismatch where the list says Finance but the summary panel says Personal.
+    const listCategory = ((email.category as EmailCategory | undefined) || "PERSONAL") as EmailCategory;
+    const listPriority = normalizeStoredUrgency(
+      listCategory,
+      email.priorityLevel || email.urgency || "LOW",
+      email,
+    );
+
     const existingSummary = await findSavedSummary(user.id, email.id);
     if (existingSummary) {
       const cleanedSummary = cleanStoredSummary(existingSummary.summary);
-      let correctedCategory = (existingSummary.category as EmailCategory) || "PERSONAL";
 
-      try {
-        correctedCategory = await classifyEmailCategory(email, userProfile);
-      } catch (error) {
-        console.error(`[Cached Summary Classification Error] ${email.subject}:`, error);
-      }
-
-      if (cleanedSummary !== existingSummary.summary || correctedCategory !== existingSummary.category) {
+      if (
+        cleanedSummary !== existingSummary.summary ||
+        existingSummary.category !== listCategory ||
+        existingSummary.priorityLevel !== listPriority ||
+        existingSummary.urgency !== listPriority
+      ) {
         try {
           const { prisma } = await import("../lib/prisma");
           await prisma.emailSummary.update({
             where: { id: existingSummary.id },
             data: {
               summary: cleanedSummary,
-              category: correctedCategory,
+              category: listCategory,
+              priorityLevel: listPriority,
+              urgency: listPriority,
             },
           });
+
           existingSummary.summary = cleanedSummary;
-          existingSummary.category = correctedCategory;
+          existingSummary.category = listCategory;
+          existingSummary.priorityLevel = listPriority;
+          existingSummary.urgency = listPriority;
         } catch (error) {
           console.error(`[Cached Summary Cleanup Error] ${email.subject}:`, error);
         }
@@ -482,8 +526,16 @@ router.post("/email/summary", async (req, res) => {
         success: true,
         cached: true,
         countedUsage: false,
-        email,
+        email: {
+          ...email,
+          category: listCategory,
+          urgency: listPriority,
+          priorityLevel: listPriority,
+        },
         ...buildCachedSummaryResponse(existingSummary),
+        category: listCategory,
+        urgency: listPriority,
+        priorityLevel: listPriority,
       });
     }
 
@@ -500,7 +552,6 @@ router.post("/email/summary", async (req, res) => {
 
     const {
       summary,
-      category,
       actionItems,
       keyDates,
       keyTakeaways,
@@ -520,6 +571,11 @@ router.post("/email/summary", async (req, res) => {
       userProfile,
     );
 
+    const finalUrgency = normalizeStoredUrgency(listCategory, urgency || listPriority, {
+      ...email,
+      summary,
+    });
+
     await saveEmailSummary({
       userId: user.id,
       gmailMessageId: email.id,
@@ -527,28 +583,17 @@ router.post("/email/summary", async (req, res) => {
       subject: fullEmail.subject || email.subject,
       snippet: fullEmail.snippet || email.snippet || "",
       summary,
-      category,
+      category: listCategory,
+      actionItems,
+      keyDates,
+      keyTakeaways,
+      importantDetails,
+      keyNumbers,
+      people,
+      companies,
+      links,
+      priorityLevel: finalUrgency,
       date: fullEmail.date || email.date,
-    });
-
-    const { prisma } = await import("../lib/prisma");
-
-    await prisma.emailSummary.updateMany({
-      where: {
-        userId: user.id,
-        gmailMessageId: email.id,
-      },
-      data: {
-        actionItems: stringifyArray(actionItems),
-        keyDates: stringifyArray(keyDates),
-        keyTakeaways: stringifyArray(keyTakeaways),
-        importantDetails: stringifyArray(importantDetails),
-        keyNumbers: stringifyArray(keyNumbers),
-        people: stringifyArray(people),
-        companies: stringifyArray(companies),
-        links: stringifyArray(links),
-        urgency,
-      },
     });
 
     const latestUsage = await getTodayUsage(user.id);
@@ -562,9 +607,14 @@ router.post("/email/summary", async (req, res) => {
       success: true,
       cached: false,
       countedUsage: true,
-      email,
+      email: {
+        ...email,
+        category: listCategory,
+        urgency: finalUrgency,
+        priorityLevel: finalUrgency,
+      },
       summary,
-      category,
+      category: listCategory,
       actionItems,
       keyDates,
       keyTakeaways,
@@ -573,7 +623,8 @@ router.post("/email/summary", async (req, res) => {
       people,
       companies,
       links,
-      urgency,
+      urgency: finalUrgency,
+      priorityLevel: finalUrgency,
     });
   } catch (error) {
     console.error("Single summary error:", error);
@@ -583,7 +634,6 @@ router.post("/email/summary", async (req, res) => {
     });
   }
 });
-
 
 router.get("/onboarding/profile", async (req, res) => {
   try {

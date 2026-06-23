@@ -14,26 +14,28 @@ enum Plan {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  plan      Plan     @default(FREE)
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  picture      String?
+  plan         Plan     @default(FREE)
   refreshToken String?
   accessToken  String?
-  accounts Account[]
-  aiConsent Boolean @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt
+  accounts     Account[]
+  aiConsent    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
 
   emailSummaries EmailSummary[]
-  dailyUsages    DailyUsage[]
-  profile        UserProfile?
+  dailyUsages     DailyUsage[]
+  profile         UserProfile?
 }
 
 model UserProfile {
-  id        String   @id @default(cuid())
-  userId    String   @unique
+  id     String @id @default(cuid())
+  userId String @unique
 
-  role      String   @default("NOT_SET")
+  role      String  @default("NOT_SET")
   roleLabel String?
 
   organizationName String?
@@ -74,17 +76,24 @@ model Account {
 }
 
 model EmailSummary {
-  id             String   @id @default(cuid())
+  id             String @id @default(cuid())
   userId         String
   gmailMessageId String
 
-  from     String
-  subject  String
-  snippet  String
-  summary  String
-  category String?
-  urgency  String?
-  date     String?
+  from           String
+  subject        String
+  snippet        String
+  title          String?
+  overview       String?
+  summary        String
+
+  category       String?
+  urgency        String?
+  priorityLevel  String?
+  priorityReason String?
+  whyReceived    String?
+  sentiment      String? @default("NEUTRAL")
+  date           String?
 
   actionItems      String?
   keyDates         String?
