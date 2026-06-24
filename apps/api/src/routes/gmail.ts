@@ -14,7 +14,11 @@ import {
   UserProfileContext,
 } from "../services/openaiService";
 import { getUserByEmail } from "../services/userService";
-import { findSavedSummary, saveEmailSummary } from "../services/summaryService";
+import {
+  findSavedSummary,
+  findSavedSummariesByMessageIds,
+  saveEmailSummaryInBackground,
+} from "../services/summaryService";
 import {
   canSummarizeToday,
   incrementTodayUsage,
@@ -69,7 +73,9 @@ function parseSavedArray(value: unknown): string[] {
   try {
     const parsed = JSON.parse(value);
     return Array.isArray(parsed)
-      ? parsed.filter((item) => typeof item === "string" && item.trim()).map((item) => item.trim())
+      ? parsed
+          .filter((item) => typeof item === "string" && item.trim())
+          .map((item) => item.trim())
       : [];
   } catch {
     return [];
@@ -105,13 +111,14 @@ function getDisplayUsageCount(usedToday: number, dailyLimit: number | null) {
   return Math.min(usedToday, dailyLimit);
 }
 
-
 function parseJsonArray(value: unknown): string[] {
   if (!value || typeof value !== "string") return [];
   try {
     const parsed = JSON.parse(value);
     return Array.isArray(parsed)
-      ? parsed.filter((item) => typeof item === "string" && item.trim()).map((item) => item.trim())
+      ? parsed
+          .filter((item) => typeof item === "string" && item.trim())
+          .map((item) => item.trim())
       : [];
   } catch {
     return [];
@@ -119,7 +126,11 @@ function parseJsonArray(value: unknown): string[] {
 }
 
 function normalizeDomain(domain: string) {
-  return domain.trim().toLowerCase().replace(/^@+/, "").replace(/^www\./, "");
+  return domain
+    .trim()
+    .toLowerCase()
+    .replace(/^@+/, "")
+    .replace(/^www\./, "");
 }
 
 function extractEmailAddress(from: string) {
@@ -202,18 +213,72 @@ function profileResponse(profile: any) {
   };
 }
 
+function looksLikeNewsletter(email: {
+  from?: string | null;
+  subject?: string | null;
+  snippet?: string | null;
+  summary?: string | null;
+}) {
+  const text =
+    `${email.from || ""} ${email.subject || ""} ${email.snippet || ""} ${email.summary || ""}`.toLowerCase();
 
-function looksLikeNewsletter(email: { from?: string | null; subject?: string | null; snippet?: string | null; summary?: string | null }) {
-  const text = `${email.from || ""} ${email.subject || ""} ${email.snippet || ""} ${email.summary || ""}`.toLowerCase();
-
-  return /\b(newsletter|daily digest|weekly digest|weekly roundup|daily brief|morning brief|substack|medium daily digest|featured stories|read more|view in browser)\b/i.test(text)
-    || /\b(substack|medium|beehiiv|mailchimp|convertkit|ghost\.io|newsletter|digest|noreply|no-reply)\b/i.test(String(email.from || ""));
+  return (
+    /\b(newsletter|daily digest|weekly digest|weekly roundup|daily brief|morning brief|substack|medium daily digest|featured stories|read more|view in browser)\b/i.test(
+      text,
+    ) ||
+    /\b(substack|medium|beehiiv|mailchimp|convertkit|ghost\.io|newsletter|digest|noreply|no-reply)\b/i.test(
+      String(email.from || ""),
+    )
+  );
 }
 
-function normalizeStoredUrgency(category: EmailCategory | string | null | undefined, urgency: string | null | undefined, email?: { from?: string | null; subject?: string | null; snippet?: string | null; summary?: string | null }) {
+function normalizeStoredUrgency(
+  category: EmailCategory | string | null | undefined,
+  urgency: string | null | undefined,
+  email?: {
+    from?: string | null;
+    subject?: string | null;
+    snippet?: string | null;
+    summary?: string | null;
+  },
+) {
+  const normalizedCategory = String(category || "PERSONAL").toUpperCase();
+  const normalizedUrgency = String(urgency || "LOW").toUpperCase();
+
+  if (normalizedCategory === "ATTENTION_NEEDED") {
+    if (normalizedUrgency === "HIGH" || normalizedUrgency === "CRITICAL")
+      return "HIGH";
+    return "MEDIUM";
+  }
+
+  if (normalizedCategory === "WORK") {
+    if (normalizedUrgency === "HIGH" || normalizedUrgency === "CRITICAL")
+      return "HIGH";
+    return "MEDIUM";
+  }
+
+  if (normalizedCategory === "FINANCE") {
+    if (normalizedUrgency === "HIGH" || normalizedUrgency === "CRITICAL")
+      return "HIGH";
+    return "MEDIUM";
+  }
+
   if (email && looksLikeNewsletter(email)) return "LOW";
-  if (category === "SPAM" || category === "PROMOTIONS" || category === "PERSONAL") return "LOW";
-  if (urgency === "HIGH" || urgency === "MEDIUM" || urgency === "LOW") return urgency;
+
+  if (
+    normalizedCategory === "SPAM" ||
+    normalizedCategory === "PROMOTIONS" ||
+    normalizedCategory === "PERSONAL" ||
+    normalizedCategory === "NEWSLETTER" ||
+    normalizedCategory === "SOCIAL"
+  ) {
+    return "LOW";
+  }
+
+  if (normalizedUrgency === "HIGH" || normalizedUrgency === "CRITICAL")
+    return "HIGH";
+  if (normalizedUrgency === "MEDIUM") return "MEDIUM";
+
   return "LOW";
 }
 
@@ -243,68 +308,56 @@ function buildCachedSummaryResponse(existingSummary: any) {
 }
 
 async function attachSummaryData(userId: string, emails: Email[]) {
-  // Performance rule:
-  // Do NOT call OpenAI while loading the inbox list.
-  // The list should only attach cached summary info and keep the category that
-  // was already computed by the Gmail/list pipeline. This keeps initial load fast
-  // and prevents tag mismatch between the list and the AI summary panel.
+  // v1.1 performance rule:
+  // - no OpenAI calls during inbox load
+  // - one bulk Prisma query instead of one query per email
+  // - deterministic category remains the single source of truth
+  if (emails.length === 0) return [];
+
+  const savedSummaryMap = await findSavedSummariesByMessageIds(
+    userId,
+    emails.map((email) => email.id),
+  );
+
   return Promise.all(
     emails.map(async (email) => {
       try {
-        const savedSummary = await findSavedSummary(userId, email.id);
+        const savedSummary = savedSummaryMap.get(email.id);
+
+        const computedCategory = await classifyEmailCategory({
+          from: email.from || "",
+          subject: email.subject || "",
+          snippet: email.snippet || "",
+        });
 
         const listCategory =
           (email.category as EmailCategory | undefined) ||
+          computedCategory ||
           (savedSummary?.category as EmailCategory | undefined) ||
           "PERSONAL";
 
-        const listUrgency =
+        const listUrgency = normalizeStoredUrgency(
+          listCategory,
           email.priorityLevel ||
-          email.urgency ||
-          savedSummary?.priorityLevel ||
-          savedSummary?.urgency ||
-          "LOW";
-
-        if (
-          savedSummary &&
-          (savedSummary.category !== listCategory ||
-            savedSummary.priorityLevel !== listUrgency ||
-            savedSummary.urgency !== listUrgency)
-        ) {
-          try {
-            const { prisma } = await import("../lib/prisma");
-            await prisma.emailSummary.update({
-              where: { id: savedSummary.id },
-              data: {
-                category: listCategory,
-                priorityLevel: normalizeStoredUrgency(listCategory, listUrgency, {
-                  ...email,
-                  summary: savedSummary.summary,
-                }),
-                urgency: normalizeStoredUrgency(listCategory, listUrgency, {
-                  ...email,
-                  summary: savedSummary.summary,
-                }),
-              },
-            });
-          } catch (error) {
-            console.error(`[Saved Category/Urgency Sync Error] ${email.subject}:`, error);
-          }
-        }
+            email.urgency ||
+            savedSummary?.priorityLevel ||
+            savedSummary?.urgency ||
+            "LOW",
+          {
+            ...email,
+            summary: savedSummary?.summary,
+          },
+        );
 
         return {
           ...email,
           category: listCategory,
-          urgency: normalizeStoredUrgency(listCategory, listUrgency, {
-            ...email,
-            summary: savedSummary?.summary,
-          }),
-          priorityLevel: normalizeStoredUrgency(listCategory, listUrgency, {
-            ...email,
-            summary: savedSummary?.summary,
-          }),
+          urgency: listUrgency,
+          priorityLevel: listUrgency,
           hasSummary: Boolean(savedSummary),
-          savedSummary: savedSummary?.summary ? cleanStoredSummary(savedSummary.summary) : null,
+          savedSummary: savedSummary?.summary
+            ? cleanStoredSummary(savedSummary.summary)
+            : null,
         };
       } catch (error) {
         console.error(`[attachSummaryData Error] ${email.subject}:`, error);
@@ -353,7 +406,6 @@ router.get("/emails", async (req, res) => {
   }
 });
 
-
 router.get("/past-emails", async (req, res) => {
   try {
     const user = req.user;
@@ -389,7 +441,7 @@ router.get("/weekly-report", async (req, res) => {
 
     const gmailQuery = `after:${startDate} before:${endDate}`;
 
-    const emails = await searchGmailEmails(gmailQuery, 50, user.id);
+    const emails = await searchGmailEmails(gmailQuery, 30, user.id);
 
     const fullEmails = await Promise.all(
       emails.map((email) => getFullEmailById(email.id)),
@@ -422,7 +474,6 @@ router.get("/weekly-report", async (req, res) => {
     });
   }
 });
-
 
 router.post("/email/unsubscribe", async (req, res) => {
   try {
@@ -480,18 +531,20 @@ router.post("/email/summary", async (req, res) => {
       });
     }
 
-    const userProfile = await getUserProfileContext(user.id);
+    const userProfilePromise = getUserProfileContext(user.id);
+    const existingSummaryPromise = findSavedSummary(user.id, email.id);
 
     // Use the exact category/priority already shown in the email list.
     // This fixes the mismatch where the list says Finance but the summary panel says Personal.
-    const listCategory = ((email.category as EmailCategory | undefined) || "PERSONAL") as EmailCategory;
+    const listCategory = ((email.category as EmailCategory | undefined) ||
+      "PERSONAL") as EmailCategory;
     const listPriority = normalizeStoredUrgency(
       listCategory,
       email.priorityLevel || email.urgency || "LOW",
       email,
     );
 
-    const existingSummary = await findSavedSummary(user.id, email.id);
+    const existingSummary = await existingSummaryPromise;
     if (existingSummary) {
       const cleanedSummary = cleanStoredSummary(existingSummary.summary);
 
@@ -518,7 +571,10 @@ router.post("/email/summary", async (req, res) => {
           existingSummary.priorityLevel = listPriority;
           existingSummary.urgency = listPriority;
         } catch (error) {
-          console.error(`[Cached Summary Cleanup Error] ${email.subject}:`, error);
+          console.error(
+            `[Cached Summary Cleanup Error] ${email.subject}:`,
+            error,
+          );
         }
       }
 
@@ -548,7 +604,10 @@ router.post("/email/summary", async (req, res) => {
       });
     }
 
-    const fullEmail = await getFullEmailById(email.id);
+    const [fullEmail, userProfile] = await Promise.all([
+      getFullEmailById(email.id),
+      userProfilePromise,
+    ]);
 
     const {
       summary,
@@ -571,12 +630,16 @@ router.post("/email/summary", async (req, res) => {
       userProfile,
     );
 
-    const finalUrgency = normalizeStoredUrgency(listCategory, urgency || listPriority, {
-      ...email,
-      summary,
-    });
+    const finalUrgency = normalizeStoredUrgency(
+      listCategory,
+      urgency || listPriority,
+      {
+        ...email,
+        summary,
+      },
+    );
 
-    await saveEmailSummary({
+    saveEmailSummaryInBackground({
       userId: user.id,
       gmailMessageId: email.id,
       from: fullEmail.from || email.from,
@@ -596,12 +659,21 @@ router.post("/email/summary", async (req, res) => {
       date: fullEmail.date || email.date,
     });
 
-    const latestUsage = await getTodayUsage(user.id);
-    const dailyLimit = getDailyLimitByPlan(user.plan);
+    void (async () => {
+      try {
+        const latestUsage = await getTodayUsage(user.id);
+        const dailyLimit = getDailyLimitByPlan(user.plan);
 
-    if (dailyLimit === null || (latestUsage?.count || 0) < dailyLimit) {
-      await incrementTodayUsage(user.id);
-    }
+        if (dailyLimit === null || (latestUsage?.count || 0) < dailyLimit) {
+          await incrementTodayUsage(user.id);
+        }
+      } catch (error) {
+        console.error(
+          `[Background Usage Update Error] ${email.subject}:`,
+          error,
+        );
+      }
+    })();
 
     return res.json({
       success: true,
@@ -672,9 +744,13 @@ router.post("/onboarding/profile", async (req, res) => {
       update: {
         role: String(body.role || "NOT_SET"),
         roleLabel: body.roleLabel ? String(body.roleLabel) : null,
-        organizationName: body.organizationName ? String(body.organizationName) : null,
+        organizationName: body.organizationName
+          ? String(body.organizationName)
+          : null,
         businessName: body.businessName ? String(body.businessName) : null,
-        priorities: stringifyArray(Array.isArray(body.priorities) ? body.priorities : []),
+        priorities: stringifyArray(
+          Array.isArray(body.priorities) ? body.priorities : [],
+        ),
         newsletterPreference: String(body.newsletterPreference || "PERSONAL"),
         onboardingCompleted: Boolean(body.onboardingCompleted),
       },
@@ -682,9 +758,13 @@ router.post("/onboarding/profile", async (req, res) => {
         userId: user.id,
         role: String(body.role || "NOT_SET"),
         roleLabel: body.roleLabel ? String(body.roleLabel) : null,
-        organizationName: body.organizationName ? String(body.organizationName) : null,
+        organizationName: body.organizationName
+          ? String(body.organizationName)
+          : null,
         businessName: body.businessName ? String(body.businessName) : null,
-        priorities: stringifyArray(Array.isArray(body.priorities) ? body.priorities : []),
+        priorities: stringifyArray(
+          Array.isArray(body.priorities) ? body.priorities : [],
+        ),
         newsletterPreference: String(body.newsletterPreference || "PERSONAL"),
         onboardingCompleted: Boolean(body.onboardingCompleted),
       },
@@ -720,12 +800,14 @@ router.get("/onboarding/domain-suggestions", async (req, res) => {
     }
 
     const profile = await getOrCreateUserProfile(user.id);
-    const knownDomains = new Set([
-      ...parseJsonArray(profile.workDomains),
-      ...parseJsonArray(profile.studyDomains),
-      ...parseJsonArray(profile.newsletterDomains),
-      ...parseJsonArray(profile.ignoredDomains),
-    ].map(normalizeDomain));
+    const knownDomains = new Set(
+      [
+        ...parseJsonArray(profile.workDomains),
+        ...parseJsonArray(profile.studyDomains),
+        ...parseJsonArray(profile.newsletterDomains),
+        ...parseJsonArray(profile.ignoredDomains),
+      ].map(normalizeDomain),
+    );
 
     const suggestions = Array.from(counts.entries())
       .filter(([domain]) => !knownDomains.has(normalizeDomain(domain)))
@@ -754,10 +836,18 @@ router.post("/onboarding/domain-labels", async (req, res) => {
     const labels = Array.isArray(req.body?.labels) ? req.body.labels : [];
     const profile = await getOrCreateUserProfile(user.id);
 
-    const workDomains = new Set(parseJsonArray(profile.workDomains).map(normalizeDomain));
-    const studyDomains = new Set(parseJsonArray(profile.studyDomains).map(normalizeDomain));
-    const newsletterDomains = new Set(parseJsonArray(profile.newsletterDomains).map(normalizeDomain));
-    const ignoredDomains = new Set(parseJsonArray(profile.ignoredDomains).map(normalizeDomain));
+    const workDomains = new Set(
+      parseJsonArray(profile.workDomains).map(normalizeDomain),
+    );
+    const studyDomains = new Set(
+      parseJsonArray(profile.studyDomains).map(normalizeDomain),
+    );
+    const newsletterDomains = new Set(
+      parseJsonArray(profile.newsletterDomains).map(normalizeDomain),
+    );
+    const ignoredDomains = new Set(
+      parseJsonArray(profile.ignoredDomains).map(normalizeDomain),
+    );
 
     for (const label of labels) {
       const domain = normalizeDomain(String(label?.domain || ""));
@@ -847,30 +937,29 @@ router.get("/summarized", async (req, res) => {
     const cleanedSummaries = await Promise.all(
       summaries.map(async (summary) => {
         const cleanedSummary = cleanStoredSummary(summary.summary);
-        let correctedCategory = (summary.category as EmailCategory) || "PERSONAL";
+        const correctedCategory =
+          (summary.category as EmailCategory) || "PERSONAL";
 
-        try {
-          correctedCategory = await classifyEmailCategory({
-            from: summary.from,
-            subject: summary.subject,
-            snippet: summary.snippet || cleanedSummary,
-          });
-        } catch (err) {
-          console.error(`[Reclassify Saved Summary Error] ${summary.id}:`, err);
-        }
+        const correctedUrgency = normalizeStoredUrgency(
+          correctedCategory,
+          summary.priorityLevel || summary.urgency,
+          {
+            ...summary,
+            summary: cleanedSummary,
+          },
+        );
 
-        const correctedUrgency = normalizeStoredUrgency(correctedCategory, summary.urgency, {
-          ...summary,
-          summary: cleanedSummary,
-        });
-
-        if (cleanedSummary !== summary.summary || correctedCategory !== summary.category || correctedUrgency !== summary.urgency) {
+        if (
+          cleanedSummary !== summary.summary ||
+          correctedUrgency !== summary.urgency ||
+          correctedUrgency !== summary.priorityLevel
+        ) {
           try {
             await prisma.emailSummary.update({
               where: { id: summary.id },
               data: {
                 summary: cleanedSummary,
-                category: correctedCategory,
+                priorityLevel: correctedUrgency,
                 urgency: correctedUrgency,
               },
             });
@@ -892,6 +981,7 @@ router.get("/summarized", async (req, res) => {
           companies: summary.companies || stringifyArray([]),
           links: summary.links || stringifyArray([]),
           urgency: correctedUrgency,
+          priorityLevel: correctedUrgency,
         };
       }),
     );

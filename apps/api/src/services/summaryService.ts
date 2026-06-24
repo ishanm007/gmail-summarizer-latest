@@ -1,5 +1,23 @@
 import { prisma } from "../lib/prisma";
 
+const ALLOWED_CATEGORIES = [
+  "WORK",
+  "SHOPPING",
+  "FINANCE",
+  "PROMOTIONS",
+  "PERSONAL",
+  "SPAM",
+  "ATTENTION_NEEDED",
+  "UNIVERSITY",
+  "SECURITY",
+  "TRAVEL",
+  "NEWSLETTER",
+  "SOCIAL",
+  "GITHUB",
+];
+
+const ALLOWED_PRIORITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
+
 export async function findSavedSummary(
   userId: string,
   gmailMessageId: string,
@@ -14,37 +32,67 @@ export async function findSavedSummary(
   });
 }
 
+export async function findSavedSummariesByMessageIds(
+  userId: string,
+  gmailMessageIds: string[],
+): Promise<Map<string, any>> {
+  const uniqueIds = Array.from(new Set(gmailMessageIds.filter(Boolean)));
+
+  if (uniqueIds.length === 0) {
+    return new Map();
+  }
+
+  const summaries = await prisma.emailSummary.findMany({
+    where: {
+      userId,
+      gmailMessageId: {
+        in: uniqueIds,
+      },
+    },
+  });
+
+  return new Map(
+    summaries.map((summary) => [summary.gmailMessageId, summary]),
+  );
+}
+
+export async function getSavedSummaryMessageIdSet(
+  userId: string,
+  gmailMessageIds: string[],
+): Promise<Set<string>> {
+  const uniqueIds = Array.from(new Set(gmailMessageIds.filter(Boolean)));
+
+  if (uniqueIds.length === 0) {
+    return new Set();
+  }
+
+  const summaries = await prisma.emailSummary.findMany({
+    where: {
+      userId,
+      gmailMessageId: {
+        in: uniqueIds,
+      },
+    },
+    select: {
+      gmailMessageId: true,
+    },
+  });
+
+  return new Set(summaries.map((summary) => summary.gmailMessageId));
+}
+
 function stringifyArray(value?: string[]) {
   return JSON.stringify(Array.isArray(value) ? value : []);
 }
 
 function normalizeCategory(category?: string) {
-  const allowed = [
-    "WORK",
-    "SHOPPING",
-    "FINANCE",
-    "PROMOTIONS",
-    "PERSONAL",
-    "SPAM",
-    "ATTENTION_NEEDED",
-    "UNIVERSITY",
-    "SECURITY",
-    "TRAVEL",
-    "NEWSLETTER",
-    "SOCIAL",
-    "GITHUB",
-  ];
-
   const normalized = String(category || "PERSONAL").toUpperCase();
-
-  return allowed.includes(normalized) ? normalized : "PERSONAL";
+  return ALLOWED_CATEGORIES.includes(normalized) ? normalized : "PERSONAL";
 }
 
 function normalizePriority(priority?: string) {
-  const allowed = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
   const normalized = String(priority || "LOW").toUpperCase();
-
-  return allowed.includes(normalized) ? normalized : "LOW";
+  return ALLOWED_PRIORITIES.includes(normalized) ? normalized : "LOW";
 }
 
 export async function saveEmailSummary(data: {
@@ -59,9 +107,6 @@ export async function saveEmailSummary(data: {
   overview?: string;
   summary: string;
 
-  // IMPORTANT:
-  // This must come from the email-list/category pipeline whenever available.
-  // Do not let the summary panel silently re-classify into a different tag.
   category: string;
 
   actionItems?: string[];
@@ -103,14 +148,12 @@ export async function saveEmailSummary(data: {
     links: stringifyArray(data.links),
 
     priorityLevel,
-    // Keep old UI/backend compatibility because some files still read `urgency`.
     urgency: priorityLevel,
+
     priorityReason: data.priorityReason ?? null,
     whyReceived: data.whyReceived ?? null,
-
     sentiment: data.sentiment ?? "NEUTRAL",
 
-    // Prisma schema expects String?, so keep date as a string.
     date: data.date ? String(data.date) : null,
   };
 
@@ -127,5 +170,11 @@ export async function saveEmailSummary(data: {
       gmailMessageId: data.gmailMessageId,
       ...payload,
     },
+  });
+}
+
+export function saveEmailSummaryInBackground(data: Parameters<typeof saveEmailSummary>[0]) {
+  void saveEmailSummary(data).catch((error) => {
+    console.error(`[Background Summary Save Error] ${data.subject}:`, error);
   });
 }

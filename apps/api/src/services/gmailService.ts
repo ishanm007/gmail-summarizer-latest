@@ -1,6 +1,7 @@
 import { google } from "googleapis";
 import { oauth2Client } from "../config/google";
 import { prisma } from "../lib/prisma";
+import { getSavedSummaryMessageIdSet } from "./summaryService";
 
 export type EmailItem = {
   id: string;
@@ -249,13 +250,61 @@ export async function getFullEmailById(messageId: string): Promise<EmailItem> {
   return getEmailMetadata(messageId, { includeBody: true });
 }
 
+async function runWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  task: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = [];
+  let index = 0;
+
+  async function worker() {
+    while (index < items.length) {
+      const currentIndex = index++;
+      results[currentIndex] = await task(items[currentIndex]);
+    }
+  }
+
+  const workerCount = Math.min(Math.max(limit, 1), items.length);
+  await Promise.all(Array.from({ length: workerCount }, worker));
+  return results;
+}
+
+async function getUnsummarizedMessageIds(
+  messages: { id?: string | null }[],
+  userId?: string,
+) {
+  const ids = messages.map((message) => message.id).filter((id): id is string => Boolean(id));
+  if (!userId || ids.length === 0) return ids;
+
+  const summarizedIds = await getSavedSummaryMessageIdSet(userId, ids);
+  return ids.filter((id) => !summarizedIds.has(id));
+}
+
+async function getEmailMetadataBatch(
+  messageIds: string[],
+  options: { includeBody?: boolean; concurrency?: number } = {},
+): Promise<EmailItem[]> {
+  const emails = await runWithConcurrency(
+    messageIds,
+    options.concurrency || 10,
+    async (messageId) => getEmailMetadata(messageId, { includeBody: options.includeBody }),
+  );
+
+  return emails.filter(Boolean);
+}
+
 export async function getUnreadEmails(
   page = 1,
   limit = 20,
   userId?: string,
 ): Promise<{ emails: EmailItem[]; hasNext: boolean }> {
   const gmail = google.gmail({ version: "v1", auth: oauth2Client });
-  const fetchSize = Math.max(limit * page, 100);
+  const safePage = Math.max(page, 1);
+  const safeLimit = Math.max(limit, 1);
+
+  // Fetch extra IDs so we can remove already-summarized emails without doing N DB calls.
+  const fetchSize = Math.min(Math.max(safeLimit * safePage + safeLimit * 2, 60), 150);
 
   const response = await gmail.users.messages.list({
     userId: "me",
@@ -263,25 +312,16 @@ export async function getUnreadEmails(
     q: `is:unread -in:trash ${blockedSearchExclusion()}`,
   });
 
-  const messages = response.data.messages || [];
-  const filtered: EmailItem[] = [];
+  const unsummarizedIds = await getUnsummarizedMessageIds(response.data.messages || [], userId);
+  const start = (safePage - 1) * safeLimit;
+  const end = start + safeLimit;
+  const pageIds = unsummarizedIds.slice(start, end);
 
-  for (const message of messages) {
-    if (!message.id) continue;
-
-    const alreadySummarized = await isAlreadySummarized(userId, message.id);
-    if (alreadySummarized) continue;
-
-    const email = await getEmailMetadata(message.id);
-    filtered.push(email);
-  }
-
-  const start = (page - 1) * limit;
-  const end = start + limit;
+  const emails = await getEmailMetadataBatch(pageIds, { concurrency: 10 });
 
   return {
-    emails: filtered.slice(start, end),
-    hasNext: end < filtered.length,
+    emails,
+    hasNext: end < unsummarizedIds.length || Boolean(response.data.nextPageToken),
   };
 }
 
@@ -290,29 +330,18 @@ export async function getRecentEmails(
   userId?: string,
 ): Promise<EmailItem[]> {
   const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+  const safeLimit = Math.max(limit, 1);
 
   const response = await gmail.users.messages.list({
     userId: "me",
-    maxResults: 50,
+    maxResults: Math.min(Math.max(safeLimit * 3, 60), 150),
     q: `-in:trash ${blockedSearchExclusion()}`,
   });
 
-  const messages = response.data.messages || [];
-  const emails: EmailItem[] = [];
+  const unsummarizedIds = await getUnsummarizedMessageIds(response.data.messages || [], userId);
+  const pageIds = unsummarizedIds.slice(0, safeLimit);
 
-  for (const message of messages) {
-    if (!message.id) continue;
-
-    const alreadySummarized = await isAlreadySummarized(userId, message.id);
-    if (alreadySummarized) continue;
-
-    const email = await getEmailMetadata(message.id);
-    emails.push(email);
-
-    if (emails.length >= limit) break;
-  }
-
-  return emails;
+  return getEmailMetadataBatch(pageIds, { concurrency: 10 });
 }
 
 export async function searchGmailEmails(
@@ -322,31 +351,20 @@ export async function searchGmailEmails(
 ): Promise<EmailItem[]> {
   const gmail = google.gmail({ version: "v1", auth: oauth2Client });
   const safeQuery = query.trim();
+  const safeLimit = Math.max(limit, 1);
 
   if (!safeQuery) return [];
 
   const response = await gmail.users.messages.list({
     userId: "me",
-    maxResults: 100,
+    maxResults: Math.min(Math.max(safeLimit * 3, 60), 150),
     q: `${safeQuery} -in:trash ${blockedSearchExclusion()}`,
   });
 
-  const messages = response.data.messages || [];
-  const emails: EmailItem[] = [];
+  const unsummarizedIds = await getUnsummarizedMessageIds(response.data.messages || [], userId);
+  const pageIds = unsummarizedIds.slice(0, safeLimit);
 
-  for (const message of messages) {
-    if (!message.id) continue;
-
-    const alreadySummarized = await isAlreadySummarized(userId, message.id);
-    if (alreadySummarized) continue;
-
-    const email = await getEmailMetadata(message.id);
-    emails.push(email);
-
-    if (emails.length >= limit) break;
-  }
-
-  return emails;
+  return getEmailMetadataBatch(pageIds, { concurrency: 10 });
 }
 
 export async function unsubscribeFromEmail(

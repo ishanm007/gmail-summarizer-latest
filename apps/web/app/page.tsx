@@ -82,8 +82,6 @@ type User = {
   aiConsent?: boolean;
 };
 
-
-
 type UserProfile = {
   role: string;
   roleLabel?: string | null;
@@ -106,17 +104,72 @@ type DomainSuggestion = {
 type OnboardingStep = "role" | "details" | "priorities" | "domains";
 
 const ROLES = [
-  { id: "STUDENT", label: "Student", icon: "🎓", desc: "School, college, exams, research" },
-  { id: "PROFESSIONAL", label: "Working Professional", icon: "💼", desc: "Company, team, clients, meetings" },
-  { id: "BUSINESS_OWNER", label: "Business Owner", icon: "🚀", desc: "Customers, invoices, vendors" },
-  { id: "GOVERNMENT", label: "Government Employee", icon: "🏛️", desc: "Official notices and department work" },
-  { id: "HEALTHCARE", label: "Healthcare Professional", icon: "⚕️", desc: "Patients, hospital, schedules" },
-  { id: "LAW", label: "Law / Legal", icon: "⚖️", desc: "Cases, clients, notices, compliance" },
-  { id: "TEACHER", label: "Teacher / Professor", icon: "👨‍🏫", desc: "Students, classes, institution" },
-  { id: "FREELANCER", label: "Freelancer", icon: "💻", desc: "Clients, projects, invoices" },
-  { id: "CREATOR", label: "Creator", icon: "🎨", desc: "Brands, platforms, audience" },
-  { id: "RESEARCHER", label: "Researcher", icon: "🔬", desc: "Papers, labs, grants, conferences" },
-  { id: "OTHER", label: "Something Else", icon: "✨", desc: "Customize it your way" },
+  {
+    id: "STUDENT",
+    label: "Student",
+    icon: "🎓",
+    desc: "School, college, exams, research",
+  },
+  {
+    id: "PROFESSIONAL",
+    label: "Working Professional",
+    icon: "💼",
+    desc: "Company, team, clients, meetings",
+  },
+  {
+    id: "BUSINESS_OWNER",
+    label: "Business Owner",
+    icon: "🚀",
+    desc: "Customers, invoices, vendors",
+  },
+  {
+    id: "GOVERNMENT",
+    label: "Government Employee",
+    icon: "🏛️",
+    desc: "Official notices and department work",
+  },
+  {
+    id: "HEALTHCARE",
+    label: "Healthcare Professional",
+    icon: "⚕️",
+    desc: "Patients, hospital, schedules",
+  },
+  {
+    id: "LAW",
+    label: "Law / Legal",
+    icon: "⚖️",
+    desc: "Cases, clients, notices, compliance",
+  },
+  {
+    id: "TEACHER",
+    label: "Teacher / Professor",
+    icon: "👨‍🏫",
+    desc: "Students, classes, institution",
+  },
+  {
+    id: "FREELANCER",
+    label: "Freelancer",
+    icon: "💻",
+    desc: "Clients, projects, invoices",
+  },
+  {
+    id: "CREATOR",
+    label: "Creator",
+    icon: "🎨",
+    desc: "Brands, platforms, audience",
+  },
+  {
+    id: "RESEARCHER",
+    label: "Researcher",
+    icon: "🔬",
+    desc: "Papers, labs, grants, conferences",
+  },
+  {
+    id: "OTHER",
+    label: "Something Else",
+    icon: "✨",
+    desc: "Customize it your way",
+  },
 ];
 
 const PRIORITY_OPTIONS = [
@@ -241,14 +294,16 @@ export default function Home() {
   const [profileLoading, setProfileLoading] = useState(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>("role");
-  const [selectedRole, setSelectedRole] = useState("STUDENT");
+  const [selectedRoles, setSelectedRoles] = useState<string[]>(["STUDENT"]);
   const [organizationName, setOrganizationName] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [priorities, setPriorities] = useState<string[]>([
     "Keep newsletters low priority",
   ]);
   const [newsletterPreference, setNewsletterPreference] = useState("PERSONAL");
-  const [domainSuggestions, setDomainSuggestions] = useState<DomainSuggestion[]>([]);
+  const [domainSuggestions, setDomainSuggestions] = useState<
+    DomainSuggestion[]
+  >([]);
   const [domainLabels, setDomainLabels] = useState<Record<string, string>>({});
   const [savingOnboarding, setSavingOnboarding] = useState(false);
 
@@ -485,13 +540,13 @@ export default function Home() {
     } catch (error) {
       console.error("Weekly report error:", error);
       setWeeklyReport(null);
-      setErrorMessage("Failed to generate weekly report. Please check backend.");
+      setErrorMessage(
+        "Failed to generate weekly report. Please check backend.",
+      );
     } finally {
       setWeeklyReportLoading(false);
     }
   }
-
-
 
   async function fetchOnboardingProfile() {
     if (!user) return;
@@ -511,7 +566,11 @@ export default function Home() {
       if (data.success) {
         const nextProfile = data.profile || null;
         setProfile(nextProfile);
-        setSelectedRole(nextProfile?.role || "STUDENT");
+        setSelectedRoles(
+          nextProfile?.role && nextProfile.role !== "NOT_SET"
+            ? nextProfile.role.split(",").filter(Boolean)
+            : ["STUDENT"],
+        );
         setOrganizationName(nextProfile?.organizationName || "");
         setBusinessName(nextProfile?.businessName || "");
         setPriorities(
@@ -519,7 +578,9 @@ export default function Home() {
             ? nextProfile.priorities
             : ["Keep newsletters low priority"],
         );
-        setNewsletterPreference(nextProfile?.newsletterPreference || "PERSONAL");
+        setNewsletterPreference(
+          nextProfile?.newsletterPreference || "PERSONAL",
+        );
       }
     } catch (error) {
       console.error(error);
@@ -530,7 +591,9 @@ export default function Home() {
   }
 
   async function saveBasicOnboarding(completed = false) {
-    const role = ROLES.find((item) => item.id === selectedRole);
+    const selectedRoleLabels = ROLES.filter((item) =>
+      selectedRoles.includes(item.id),
+    ).map((item) => item.label);
 
     const res = await apiFetch(`${API_BASE}/onboarding/profile`, {
       method: "POST",
@@ -538,8 +601,8 @@ export default function Home() {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        role: selectedRole,
-        roleLabel: role?.label || selectedRole,
+        role: selectedRoles.join(","),
+        roleLabel: selectedRoleLabels.join(", "),
         organizationName: organizationName.trim() || null,
         businessName: businessName.trim() || null,
         priorities,
@@ -593,12 +656,13 @@ export default function Home() {
       if (onboardingStep === "priorities") {
         setOnboardingStep("domains");
 
-        Promise.all([saveBasicOnboarding(false), fetchDomainSuggestions()]).catch(
-          (error) => {
-            console.error(error);
-            setErrorMessage("Failed to prepare domain suggestions.");
-          },
-        );
+        Promise.all([
+          saveBasicOnboarding(false),
+          fetchDomainSuggestions(),
+        ]).catch((error) => {
+          console.error(error);
+          setErrorMessage("Failed to prepare domain suggestions.");
+        });
 
         return;
       }
@@ -624,10 +688,20 @@ export default function Home() {
       showSuccess("Your AI inbox profile is ready.");
     } catch (error) {
       console.error(error);
-      setErrorMessage("Failed to save onboarding. Please check backend routes.");
+      setErrorMessage(
+        "Failed to save onboarding. Please check backend routes.",
+      );
     } finally {
       setSavingOnboarding(false);
     }
+  }
+
+  function toggleSelectedRole(roleId: string) {
+    setSelectedRoles((prev) =>
+      prev.includes(roleId)
+        ? prev.filter((id) => id !== roleId)
+        : [...prev, roleId],
+    );
   }
 
   function togglePriority(option: string) {
@@ -718,7 +792,10 @@ export default function Home() {
         const finalCategory = email.category || data.category || "PERSONAL";
         const finalUrgency = normalizeUrgencyForCategory(
           finalCategory,
-          data.priorityLevel || data.urgency || email.priorityLevel || email.urgency,
+          data.priorityLevel ||
+            data.urgency ||
+            email.priorityLevel ||
+            email.urgency,
         );
         setUrgency(finalUrgency);
         setErrorMessage("");
@@ -751,7 +828,6 @@ export default function Home() {
       setSummaryLoading(false);
     }
   }
-
 
   async function unsubscribeSelectedEmail() {
     const gmailId = getSelectedGmailId();
@@ -987,8 +1063,12 @@ export default function Home() {
     }
   }
 
-
-  function renderInfoList(title: string, emptyText: string, items: string[], prefix = "•") {
+  function renderInfoList(
+    title: string,
+    emptyText: string,
+    items: string[],
+    prefix = "•",
+  ) {
     return (
       <div className="mt-4 rounded-xl bg-black/25 p-4">
         <h3 className="mb-3 font-semibold">{title}</h3>
@@ -1037,7 +1117,8 @@ export default function Home() {
   }, [summaries, searchQuery, activeCategory]);
 
   const hasSelectedEmail = Boolean(getSelectedGmailId());
-  const showOnboarding = Boolean(user) && !profileLoading && !profile?.onboardingCompleted;
+  const showOnboarding =
+    Boolean(user) && !profileLoading && !profile?.onboardingCompleted;
 
   if (authLoading) {
     return (
@@ -1068,8 +1149,6 @@ export default function Home() {
     );
   }
 
-
-
   if (showOnboarding) {
     return (
       <main className="min-h-screen bg-[#050513] px-4 py-8 text-white">
@@ -1082,8 +1161,9 @@ export default function Home() {
               Let Gmail Summarizer understand you.
             </h1>
             <p className="mx-auto mt-3 max-w-2xl text-indigo-200/65">
-              A quick interactive setup so emails from work, college, newsletters,
-              finance, shopping, and official sources are classified properly.
+              A quick interactive setup so emails from work, college,
+              newsletters, finance, shopping, and official sources are
+              classified properly.
             </p>
           </div>
 
@@ -1119,16 +1199,18 @@ export default function Home() {
                   {ROLES.map((role) => (
                     <button
                       key={role.id}
-                      onClick={() => setSelectedRole(role.id)}
+                      onClick={() => toggleSelectedRole(role.id)}
                       className={`rounded-3xl border p-5 text-left transition ${
-                        selectedRole === role.id
+                        selectedRoles.includes(role.id)
                           ? "border-blue-400 bg-blue-600/25 shadow-lg shadow-blue-500/10"
                           : "border-indigo-500/20 bg-black/20 hover:bg-indigo-500/10"
                       }`}
                     >
                       <div className="text-4xl">{role.icon}</div>
                       <h3 className="mt-3 font-bold">{role.label}</h3>
-                      <p className="mt-1 text-sm text-indigo-200/55">{role.desc}</p>
+                      <p className="mt-1 text-sm text-indigo-200/55">
+                        {role.desc}
+                      </p>
                     </button>
                   ))}
                 </div>
@@ -1144,7 +1226,7 @@ export default function Home() {
                 </p>
 
                 <div className="mt-6 grid gap-4 md:grid-cols-2">
-                  {selectedRole === "BUSINESS_OWNER" ? (
+                  {selectedRoles.includes("BUSINESS_OWNER") ? (
                     <label className="block rounded-3xl border border-indigo-500/20 bg-black/20 p-5">
                       <span className="text-sm text-indigo-200/70">
                         Business / brand name
@@ -1180,7 +1262,9 @@ export default function Home() {
                       className="mt-3 w-full rounded-2xl bg-[#111827] px-4 py-3 outline-none"
                     >
                       <option value="PERSONAL">Personal + Low priority</option>
-                      <option value="PROMOTIONS">Promotions + Low priority</option>
+                      <option value="PROMOTIONS">
+                        Promotions + Low priority
+                      </option>
                       <option value="IGNORE">Keep out of the way</option>
                     </select>
                   </label>
@@ -1190,7 +1274,9 @@ export default function Home() {
 
             {onboardingStep === "priorities" && (
               <section>
-                <h2 className="text-2xl font-bold">What should AI never miss?</h2>
+                <h2 className="text-2xl font-bold">
+                  What should AI never miss?
+                </h2>
                 <p className="mt-2 text-indigo-200/60">
                   Pick everything that matters. You can change this later.
                 </p>
@@ -1219,14 +1305,15 @@ export default function Home() {
                   Label detected sender domains
                 </h2>
                 <p className="mt-2 text-indigo-200/60">
-                  The app detects likely domains from Gmail. You only tap labels;
-                  you don’t type email addresses.
+                  The app detects likely domains from Gmail. You only tap
+                  labels; you don’t type email addresses.
                 </p>
 
                 <div className="mt-5 space-y-3">
                   {domainSuggestions.length === 0 ? (
                     <p className="rounded-3xl border border-indigo-500/20 bg-black/20 p-5 text-indigo-200/70">
-                      No useful domain suggestions found yet. You can finish setup.
+                      No useful domain suggestions found yet. You can finish
+                      setup.
                     </p>
                   ) : (
                     domainSuggestions.map((item) => (
@@ -1238,16 +1325,28 @@ export default function Home() {
                           <div>
                             <p className="font-bold">{item.domain}</p>
                             <p className="text-sm text-indigo-200/50">
-                              Seen {item.count} time{item.count === 1 ? "" : "s"}
+                              Seen {item.count} time
+                              {item.count === 1 ? "" : "s"}
                             </p>
                           </div>
 
-                          <div className="flex flex-wrap gap-2">
+                          <div className="grid grid-cols-4 gap-2">
                             {[
-                              ["WORK", "Work"],
-                              ["STUDY", "Study"],
-                              ["NEWSLETTER", "Newsletter"],
-                              ["IGNORE", "Ignore"],
+                                ["WORK", "💼 Work"],
+                                ["UNIVERSITY", "🎓 University"],
+                                ["ATTENTION_NEEDED", "⚠️ Attention"],
+                                ["FINANCE", "💰 Finance"],
+                                ["SHOPPING", "🛒 Shopping"],
+                                ["PROMOTIONS", "📢 Promotions"],
+                                ["NEWSLETTER", "📰 Newsletter"],
+                                ["PERSONAL", "👤 Personal"],
+                                ["SECURITY", "🛡️ Security"],
+                                ["TRAVEL", "✈️ Travel"],
+                                ["SOCIAL", "👥 Social"],
+                                ["GITHUB", "💻 GitHub"],
+                                ["SPAM", "🚫 Spam"],
+                                ["IGNORE", "🙈 Ignore"],
+
                             ].map(([type, label]) => (
                               <button
                                 key={type}
@@ -1285,8 +1384,10 @@ export default function Home() {
               <button
                 onClick={() => {
                   if (onboardingStep === "details") setOnboardingStep("role");
-                  if (onboardingStep === "priorities") setOnboardingStep("details");
-                  if (onboardingStep === "domains") setOnboardingStep("priorities");
+                  if (onboardingStep === "priorities")
+                    setOnboardingStep("details");
+                  if (onboardingStep === "domains")
+                    setOnboardingStep("priorities");
                 }}
                 className="rounded-2xl bg-indigo-500/10 px-5 py-3 font-semibold text-indigo-100 hover:bg-indigo-500/20"
               >
@@ -1321,7 +1422,9 @@ export default function Home() {
             </div>
 
             <div>
-              <h1 className="text-lg font-black tracking-tight">Gmail Summarizer</h1>
+              <h1 className="text-lg font-black tracking-tight">
+                Gmail Summarizer
+              </h1>
               <p className="mt-1 font-mono text-sm tracking-[0.25em] text-indigo-400">
                 v1.1 · active
               </p>
@@ -1370,7 +1473,6 @@ export default function Home() {
           </nav>
 
           <div className="mt-auto space-y-5">
-
             {profile?.onboardingCompleted && (
               <div className="rounded-3xl border border-indigo-500/20 bg-[#111029] p-4 shadow-xl shadow-black/30">
                 <p className="font-mono text-xs uppercase tracking-[0.3em] text-indigo-300">
@@ -1442,8 +1544,12 @@ export default function Home() {
               )}
 
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold">{getUserDisplayName()}</p>
-                <p className="truncate text-xs text-indigo-300/70">{user.email}</p>
+                <p className="truncate text-sm font-bold">
+                  {getUserDisplayName()}
+                </p>
+                <p className="truncate text-xs text-indigo-300/70">
+                  {user.email}
+                </p>
               </div>
 
               <button
@@ -1459,550 +1565,612 @@ export default function Home() {
 
         <section className="flex h-screen min-w-0 flex-col overflow-hidden bg-gradient-to-br from-[#050513] via-[#08071d] to-[#0d0b25]">
           <div className="shrink-0 border-b border-[#211d45] px-4 py-4 md:px-6">
-          <header>
-            <h2 className="text-2xl font-black tracking-tight">
-              {activeTab === "inbox" && "Inbox"}
-              {activeTab === "summarized" && "Summarized & Saved"}
-            </h2>
+            <header>
+              <h2 className="text-2xl font-black tracking-tight">
+                {activeTab === "inbox" && "Inbox"}
+                {activeTab === "summarized" && "Summarized & Saved"}
+              </h2>
 
-            <p className="mt-1 max-w-md text-sm text-indigo-300/70">
-              {activeTab === "summarized"
-                ? "Search your saved summaries."
-                : "Search your full Gmail and summarize any result."}
-            </p>
+              <p className="mt-1 max-w-md text-sm text-indigo-300/70">
+                {activeTab === "summarized"
+                  ? "Search your saved summaries."
+                  : "Search your full Gmail and summarize any result."}
+              </p>
 
-            {errorMessage && (
-              <div className="mt-4 flex items-start justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-                <span>{errorMessage}</span>
+              {errorMessage && (
+                <div className="mt-4 flex items-start justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                  <span>{errorMessage}</span>
 
-                <button
-                  onClick={() => setErrorMessage("")}
-                  className="text-red-200 hover:text-white"
-                >
-                  ✕
-                </button>
-              </div>
-            )}
-
-            {successMessage && (
-              <div className="mt-4 rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-300">
-                {successMessage}
-              </div>
-            )}
-
-            <div className="mt-4 flex flex-col gap-3 xl:flex-row xl:items-center">
-              <div className="flex min-w-0 flex-1 items-center gap-3 rounded-3xl border border-indigo-500/20 bg-[#0d0c24] px-5 py-3 shadow-inner shadow-black/30">
-                <input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={
-                    activeTab === "summarized"
-                      ? "Search saved summaries..."
-                      : "Search your full Gmail..."
-                  }
-                  className="w-full bg-transparent text-white outline-none placeholder:text-indigo-300/50"
-                />
-
-                {searchQuery && (
                   <button
-                    onClick={clearSearch}
-                    className="text-sm text-indigo-100/70 hover:text-white"
+                    onClick={() => setErrorMessage("")}
+                    className="text-red-200 hover:text-white"
                   >
-                    Clear
+                    ✕
                   </button>
-                )}
+                </div>
+              )}
+
+              {successMessage && (
+                <div className="mt-4 rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-300">
+                  {successMessage}
+                </div>
+              )}
+
+              <div className="mt-4 flex flex-col gap-3 xl:flex-row xl:items-center">
+                <div className="flex min-w-0 flex-1 items-center gap-3 rounded-3xl border border-indigo-500/20 bg-[#0d0c24] px-5 py-3 shadow-inner shadow-black/30">
+                  <input
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={
+                      activeTab === "summarized"
+                        ? "Search saved summaries..."
+                        : "Search your full Gmail..."
+                    }
+                    className="w-full bg-transparent text-white outline-none placeholder:text-indigo-300/50"
+                  />
+
+                  {searchQuery && (
+                    <button
+                      onClick={clearSearch}
+                      className="text-sm text-indigo-100/70 hover:text-white"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex shrink-0 flex-wrap gap-3">
+                  <button
+                    onClick={refreshCurrentTab}
+                    disabled={refreshing}
+                    className={`rounded-3xl px-5 py-3 font-semibold ${
+                      refreshing
+                        ? "cursor-not-allowed bg-blue-600/50"
+                        : "bg-gradient-to-r from-blue-500 to-violet-600 shadow-lg shadow-blue-500/20 hover:opacity-90"
+                    }`}
+                  >
+                    {refreshing ? "Refreshing..." : "Refresh"}
+                  </button>
+
+                  <button
+                    onClick={fetchWeeklyReport}
+                    disabled={weeklyReportLoading}
+                    className={`rounded-3xl px-5 py-3 font-semibold ${
+                      weeklyReportLoading
+                        ? "cursor-not-allowed bg-purple-600/50"
+                        : "bg-gradient-to-r from-violet-500 to-fuchsia-600 shadow-lg shadow-violet-500/20 hover:opacity-90"
+                    }`}
+                  >
+                    {weeklyReportLoading ? "Generating..." : "Weekly Report"}
+                  </button>
+
+                  <button
+                    onClick={openSelectedInGmail}
+                    disabled={!hasSelectedEmail}
+                    className={`rounded-3xl px-5 py-3 font-semibold ${
+                      hasSelectedEmail
+                        ? "border border-indigo-500/20 bg-[#0d0c24] text-indigo-100 hover:bg-indigo-500/10"
+                        : "cursor-not-allowed bg-indigo-500/10 text-gray-500"
+                    }`}
+                  >
+                    Open in Gmail
+                  </button>
+                </div>
               </div>
 
-              <div className="flex shrink-0 flex-wrap gap-3">
-                <button
-                  onClick={refreshCurrentTab}
-                  disabled={refreshing}
-                  className={`rounded-3xl px-5 py-3 font-semibold ${
-                    refreshing
-                      ? "cursor-not-allowed bg-blue-600/50"
-                      : "bg-gradient-to-r from-blue-500 to-violet-600 shadow-lg shadow-blue-500/20 hover:opacity-90"
-                  }`}
-                >
-                  {refreshing ? "Refreshing..." : "Refresh"}
-                </button>
-
-                <button
-                  onClick={fetchWeeklyReport}
-                  disabled={weeklyReportLoading}
-                  className={`rounded-3xl px-5 py-3 font-semibold ${
-                    weeklyReportLoading
-                      ? "cursor-not-allowed bg-purple-600/50"
-                      : "bg-gradient-to-r from-violet-500 to-fuchsia-600 shadow-lg shadow-violet-500/20 hover:opacity-90"
-                  }`}
-                >
-                  {weeklyReportLoading ? "Generating..." : "Weekly Report"}
-                </button>
-
-                <button
-                  onClick={openSelectedInGmail}
-                  disabled={!hasSelectedEmail}
-                  className={`rounded-3xl px-5 py-3 font-semibold ${
-                    hasSelectedEmail
-                      ? "border border-indigo-500/20 bg-[#0d0c24] text-indigo-100 hover:bg-indigo-500/10"
-                      : "cursor-not-allowed bg-indigo-500/10 text-gray-500"
-                  }`}
-                >
-                  Open in Gmail
-                </button>
-
-
-              
+              <div className="mt-4 flex items-center gap-2 overflow-x-auto pb-1">
+                {CATEGORIES.map((category) => (
+                  <button
+                    key={category.key}
+                    onClick={() => setActiveCategory(category.key)}
+                    className={`shrink-0 rounded-full border px-3 py-2 text-sm transition ${
+                      activeCategory === category.key
+                        ? "border-blue-400 bg-blue-600 text-white"
+                        : "border-[#24214a] bg-indigo-500/10 text-indigo-100/70 hover:bg-indigo-500/15"
+                    }`}
+                  >
+                    {category.label}
+                  </button>
+                ))}
               </div>
-            </div>
-
-            <div className="mt-4 flex items-center gap-2 overflow-x-auto pb-1">
-              {CATEGORIES.map((category) => (
-                <button
-                  key={category.key}
-                  onClick={() => setActiveCategory(category.key)}
-                  className={`shrink-0 rounded-full border px-3 py-2 text-sm transition ${
-                    activeCategory === category.key
-                      ? "border-blue-400 bg-blue-600 text-white"
-                      : "border-[#24214a] bg-indigo-500/10 text-indigo-100/70 hover:bg-indigo-500/15"
-                  }`}
-                >
-                  {category.label}
-                </button>
-              ))}
-            </div>
-          </header>
+            </header>
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-4 md:px-6">
-          {weeklyReport && (
-            <div className="mb-4 max-h-[32vh] shrink-0 overflow-y-auto rounded-3xl border border-purple-500/30 bg-purple-500/10 p-5 overscroll-contain">
-              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div>
-                  <p className="text-sm font-bold uppercase text-purple-300">
-                    Weekly Email Report
-                  </p>
+            {weeklyReport && (
+              <div className="mb-4 max-h-[32vh] shrink-0 overflow-y-auto rounded-3xl border border-purple-500/30 bg-purple-500/10 p-5 overscroll-contain">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <p className="text-sm font-bold uppercase text-purple-300">
+                      Weekly Email Report
+                    </p>
 
-                  <h3 className="mt-2 text-2xl font-bold">
-                    Monday to Today Summary
+                    <h3 className="mt-2 text-2xl font-bold">
+                      Monday to Today Summary
+                    </h3>
+
+                    <p className="mt-1 text-sm text-indigo-100/70">
+                      {weeklyReport.range?.from} to {weeklyReport.range?.to} •{" "}
+                      {weeklyReport.totalEmails ?? 0} emails scanned
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => setWeeklyReport(null)}
+                    className="rounded-xl bg-indigo-500/15 px-4 py-2 text-sm font-semibold text-indigo-100 hover:bg-white/20"
+                  >
+                    Close Report
+                  </button>
+                </div>
+
+                <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                  <div className="rounded-xl bg-black/25 p-4 lg:col-span-2">
+                    <h4 className="mb-2 font-semibold">📌 Overall Summary</h4>
+                    <p className="whitespace-pre-wrap text-sm text-indigo-100">
+                      {weeklyReport.report?.summary || "No summary available."}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-black/25 p-4">
+                    <h4 className="mb-3 font-semibold">⚠️ Important Emails</h4>
+                    {(weeklyReport.report?.importantEmails || []).length ===
+                    0 ? (
+                      <p className="text-sm text-indigo-300/60">
+                        No important emails found.
+                      </p>
+                    ) : (
+                      <ul className="space-y-2 text-sm text-indigo-100">
+                        {(weeklyReport.report?.importantEmails || []).map(
+                          (item: string, index: number) => (
+                            <li
+                              key={index}
+                              className="rounded-lg bg-indigo-500/10 p-3"
+                            >
+                              • {item}
+                            </li>
+                          ),
+                        )}
+                      </ul>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl bg-black/25 p-4">
+                    <h4 className="mb-3 font-semibold">✅ Action Items</h4>
+                    {(weeklyReport.report?.actionItems || []).length === 0 ? (
+                      <p className="text-sm text-indigo-300/60">
+                        No action items found.
+                      </p>
+                    ) : (
+                      <ul className="space-y-2 text-sm text-indigo-100">
+                        {(weeklyReport.report?.actionItems || []).map(
+                          (item: string, index: number) => (
+                            <li
+                              key={index}
+                              className="rounded-lg bg-indigo-500/10 p-3"
+                            >
+                              ☐ {item}
+                            </li>
+                          ),
+                        )}
+                      </ul>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl bg-black/25 p-4">
+                    <h4 className="mb-3 font-semibold">💰 Finance Updates</h4>
+                    {(weeklyReport.report?.financeUpdates || []).length ===
+                    0 ? (
+                      <p className="text-sm text-indigo-300/60">
+                        No finance updates found.
+                      </p>
+                    ) : (
+                      <ul className="space-y-2 text-sm text-indigo-100">
+                        {(weeklyReport.report?.financeUpdates || []).map(
+                          (item: string, index: number) => (
+                            <li
+                              key={index}
+                              className="rounded-lg bg-indigo-500/10 p-3"
+                            >
+                              • {item}
+                            </li>
+                          ),
+                        )}
+                      </ul>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl bg-black/25 p-4">
+                    <h4 className="mb-3 font-semibold">💼 Work Updates</h4>
+                    {(weeklyReport.report?.workUpdates || []).length === 0 ? (
+                      <p className="text-sm text-indigo-300/60">
+                        No work updates found.
+                      </p>
+                    ) : (
+                      <ul className="space-y-2 text-sm text-indigo-100">
+                        {(weeklyReport.report?.workUpdates || []).map(
+                          (item: string, index: number) => (
+                            <li
+                              key={index}
+                              className="rounded-lg bg-indigo-500/10 p-3"
+                            >
+                              • {item}
+                            </li>
+                          ),
+                        )}
+                      </ul>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl bg-black/25 p-4">
+                    <h4 className="mb-3 font-semibold">🛒 Shopping Updates</h4>
+                    {(weeklyReport.report?.shoppingUpdates || []).length ===
+                    0 ? (
+                      <p className="text-sm text-indigo-300/60">
+                        No shopping updates found.
+                      </p>
+                    ) : (
+                      <ul className="space-y-2 text-sm text-indigo-100">
+                        {(weeklyReport.report?.shoppingUpdates || []).map(
+                          (item: string, index: number) => (
+                            <li
+                              key={index}
+                              className="rounded-lg bg-indigo-500/10 p-3"
+                            >
+                              • {item}
+                            </li>
+                          ),
+                        )}
+                      </ul>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl bg-black/25 p-4">
+                    <h4 className="mb-3 font-semibold">
+                      📢 Promotions Summary
+                    </h4>
+                    <p className="text-sm text-indigo-100">
+                      {weeklyReport.report?.promotionsSummary ||
+                        "No promotional summary available."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="grid min-h-0 flex-1 gap-4 overflow-hidden lg:grid-cols-[1.15fr_0.9fr]">
+              <section className="flex min-h-0 flex-col overflow-hidden rounded-3xl bg-[#0d0c24]">
+                <div className="shrink-0 border-b border-[#24214a] p-4">
+                  <h3 className="text-xl font-bold">
+                    {activeTab === "summarized"
+                      ? "Saved Summaries"
+                      : searchQuery.trim()
+                        ? "Gmail Search Results"
+                        : "Email List"}
                   </h3>
-
-                  <p className="mt-1 text-sm text-indigo-100/70">
-                    {weeklyReport.range?.from} to {weeklyReport.range?.to} • {" "}
-                    {weeklyReport.totalEmails ?? 0} emails scanned
-                  </p>
                 </div>
 
-                <button
-                  onClick={() => setWeeklyReport(null)}
-                  className="rounded-xl bg-indigo-500/15 px-4 py-2 text-sm font-semibold text-indigo-100 hover:bg-white/20"
-                >
-                  Close Report
-                </button>
-              </div>
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                  {loading || gmailSearchLoading ? (
+                    <div className="p-5 text-indigo-100/70">Loading...</div>
+                  ) : activeTab === "summarized" ? (
+                    filteredSummaries.length === 0 ? (
+                      <div className="p-5 text-indigo-100/70">
+                        No summarized emails found.
+                      </div>
+                    ) : (
+                      filteredSummaries.map((item) => (
+                        <button
+                          key={item.id}
+                          ref={
+                            selectedSummary?.id === item.id
+                              ? selectedItemRef
+                              : null
+                          }
+                          onClick={() => handleSummaryClick(item)}
+                          className={`w-full border-b border-[#24214a] p-5 text-left transition-all ${
+                            selectedSummary?.id === item.id
+                              ? "border-l-4 border-l-blue-400 bg-blue-600/30"
+                              : "hover:bg-blue-600/20"
+                          }`}
+                        >
+                          <h3 className="truncate font-bold">{item.subject}</h3>
 
-              <div className="mt-5 grid gap-4 lg:grid-cols-2">
-                <div className="rounded-xl bg-black/25 p-4 lg:col-span-2">
-                  <h4 className="mb-2 font-semibold">📌 Overall Summary</h4>
-                  <p className="whitespace-pre-wrap text-sm text-indigo-100">
-                    {weeklyReport.report?.summary || "No summary available."}
-                  </p>
-                </div>
+                          <p className="mt-1 text-sm text-indigo-300/60">
+                            {item.from}
+                          </p>
 
-                <div className="rounded-xl bg-black/25 p-4">
-                  <h4 className="mb-3 font-semibold">⚠️ Important Emails</h4>
-                  {(weeklyReport.report?.importantEmails || []).length === 0 ? (
-                    <p className="text-sm text-indigo-300/60">No important emails found.</p>
-                  ) : (
-                    <ul className="space-y-2 text-sm text-indigo-100">
-                      {(weeklyReport.report?.importantEmails || []).map(
-                        (item: string, index: number) => (
-                          <li key={index} className="rounded-lg bg-indigo-500/10 p-3">
-                            • {item}
-                          </li>
-                        ),
-                      )}
-                    </ul>
-                  )}
-                </div>
+                          <p className="mt-2 inline-flex rounded-full bg-indigo-500/10 px-3 py-1 text-xs text-indigo-100/70">
+                            {getCategoryLabel(item.category)}
+                          </p>
 
-                <div className="rounded-xl bg-black/25 p-4">
-                  <h4 className="mb-3 font-semibold">✅ Action Items</h4>
-                  {(weeklyReport.report?.actionItems || []).length === 0 ? (
-                    <p className="text-sm text-indigo-300/60">No action items found.</p>
-                  ) : (
-                    <ul className="space-y-2 text-sm text-indigo-100">
-                      {(weeklyReport.report?.actionItems || []).map(
-                        (item: string, index: number) => (
-                          <li key={index} className="rounded-lg bg-indigo-500/10 p-3">
-                            ☐ {item}
-                          </li>
-                        ),
-                      )}
-                    </ul>
-                  )}
-                </div>
+                          <p className="mt-3 line-clamp-2 text-sm text-indigo-100/70">
+                            {item.summary}
+                          </p>
 
-                <div className="rounded-xl bg-black/25 p-4">
-                  <h4 className="mb-3 font-semibold">💰 Finance Updates</h4>
-                  {(weeklyReport.report?.financeUpdates || []).length === 0 ? (
-                    <p className="text-sm text-indigo-300/60">No finance updates found.</p>
-                  ) : (
-                    <ul className="space-y-2 text-sm text-indigo-100">
-                      {(weeklyReport.report?.financeUpdates || []).map(
-                        (item: string, index: number) => (
-                          <li key={index} className="rounded-lg bg-indigo-500/10 p-3">
-                            • {item}
-                          </li>
-                        ),
-                      )}
-                    </ul>
-                  )}
-                </div>
+                          <div className="mt-2 flex items-center justify-between gap-3">
+                            <p className="text-xs text-green-400">Saved</p>
 
-                <div className="rounded-xl bg-black/25 p-4">
-                  <h4 className="mb-3 font-semibold">💼 Work Updates</h4>
-                  {(weeklyReport.report?.workUpdates || []).length === 0 ? (
-                    <p className="text-sm text-indigo-300/60">No work updates found.</p>
-                  ) : (
-                    <ul className="space-y-2 text-sm text-indigo-100">
-                      {(weeklyReport.report?.workUpdates || []).map(
-                        (item: string, index: number) => (
-                          <li key={index} className="rounded-lg bg-indigo-500/10 p-3">
-                            • {item}
-                          </li>
-                        ),
-                      )}
-                    </ul>
-                  )}
-                </div>
-
-                <div className="rounded-xl bg-black/25 p-4">
-                  <h4 className="mb-3 font-semibold">🛒 Shopping Updates</h4>
-                  {(weeklyReport.report?.shoppingUpdates || []).length === 0 ? (
-                    <p className="text-sm text-indigo-300/60">No shopping updates found.</p>
-                  ) : (
-                    <ul className="space-y-2 text-sm text-indigo-100">
-                      {(weeklyReport.report?.shoppingUpdates || []).map(
-                        (item: string, index: number) => (
-                          <li key={index} className="rounded-lg bg-indigo-500/10 p-3">
-                            • {item}
-                          </li>
-                        ),
-                      )}
-                    </ul>
-                  )}
-                </div>
-
-                <div className="rounded-xl bg-black/25 p-4">
-                  <h4 className="mb-3 font-semibold">📢 Promotions Summary</h4>
-                  <p className="text-sm text-indigo-100">
-                    {weeklyReport.report?.promotionsSummary ||
-                      "No promotional summary available."}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="grid min-h-0 flex-1 gap-4 overflow-hidden lg:grid-cols-[1.15fr_0.9fr]">
-            <section className="flex min-h-0 flex-col overflow-hidden rounded-3xl bg-[#0d0c24]">
-              <div className="shrink-0 border-b border-[#24214a] p-4">
-                <h3 className="text-xl font-bold">
-                  {activeTab === "summarized"
-                    ? "Saved Summaries"
-                    : searchQuery.trim()
-                      ? "Gmail Search Results"
-                      : "Email List"}
-                </h3>
-              </div>
-
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-                {loading || gmailSearchLoading ? (
-                  <div className="p-5 text-indigo-100/70">Loading...</div>
-                ) : activeTab === "summarized" ? (
-                  filteredSummaries.length === 0 ? (
+                            <p className="text-xs text-gray-500">
+                              {new Date(
+                                item.date || item.createdAt,
+                              ).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </button>
+                      ))
+                    )
+                  ) : filteredEmails.length === 0 ? (
                     <div className="p-5 text-indigo-100/70">
-                      No summarized emails found.
+                      No emails found.
                     </div>
                   ) : (
-                    filteredSummaries.map((item) => (
+                    filteredEmails.map((email) => (
                       <button
-                        key={item.id}
+                        key={email.id}
                         ref={
-                          selectedSummary?.id === item.id
+                          selectedEmail?.id === email.id
                             ? selectedItemRef
                             : null
                         }
-                        onClick={() => handleSummaryClick(item)}
+                        onClick={() => handleEmailClick(email)}
                         className={`w-full border-b border-[#24214a] p-5 text-left transition-all ${
-                          selectedSummary?.id === item.id
+                          selectedEmail?.id === email.id
                             ? "border-l-4 border-l-blue-400 bg-blue-600/30"
                             : "hover:bg-blue-600/20"
                         }`}
                       >
-                        <h3 className="truncate font-bold">{item.subject}</h3>
+                        <h3 className="truncate font-bold">{email.subject}</h3>
 
                         <p className="mt-1 text-sm text-indigo-300/60">
-                          {item.from}
+                          {email.from}
                         </p>
 
                         <p className="mt-2 inline-flex rounded-full bg-indigo-500/10 px-3 py-1 text-xs text-indigo-100/70">
-                          {getCategoryLabel(item.category)}
+                          {getCategoryLabel(email.category)}
                         </p>
 
                         <p className="mt-3 line-clamp-2 text-sm text-indigo-100/70">
-                          {item.summary}
+                          {email.snippet}
                         </p>
 
-                        <div className="mt-2 flex items-center justify-between gap-3">
-                          <p className="text-xs text-green-400">Saved</p>
-
-                          <p className="text-xs text-gray-500">
-                            {new Date(
-                              item.date || item.createdAt,
-                            ).toLocaleDateString()}
+                        {email.hasSummary ? (
+                          <p className="mt-2 text-xs text-green-400">
+                            ✅ Summary Ready
                           </p>
-                        </div>
+                        ) : (
+                          <p className="mt-2 text-xs text-yellow-400">
+                            ⏳ Preparing Summary
+                          </p>
+                        )}
                       </button>
                     ))
-                  )
-                ) : filteredEmails.length === 0 ? (
-                  <div className="p-5 text-indigo-100/70">No emails found.</div>
-                ) : (
-                  filteredEmails.map((email) => (
-                    <button
-                      key={email.id}
-                      ref={
-                        selectedEmail?.id === email.id ? selectedItemRef : null
-                      }
-                      onClick={() => handleEmailClick(email)}
-                      className={`w-full border-b border-[#24214a] p-5 text-left transition-all ${
-                        selectedEmail?.id === email.id
-                          ? "border-l-4 border-l-blue-400 bg-blue-600/30"
-                          : "hover:bg-blue-600/20"
-                      }`}
-                    >
-                      <h3 className="truncate font-bold">{email.subject}</h3>
+                  )}
+                </div>
+              </section>
 
-                      <p className="mt-1 text-sm text-indigo-300/60">
-                        {email.from}
-                      </p>
+              <aside className="flex min-h-0 flex-col overflow-hidden rounded-3xl border border-indigo-500/25 bg-[#0d0c24] shadow-2xl shadow-indigo-950/40">
+                <div className="shrink-0 flex items-center gap-3 border-b border-indigo-500/20 px-5 py-4">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-500/10 text-lg text-indigo-300">
+                    ⚙️
+                  </div>
 
-                      <p className="mt-2 inline-flex rounded-full bg-indigo-500/10 px-3 py-1 text-xs text-indigo-100/70">
-                        {getCategoryLabel(email.category)}
-                      </p>
+                  <p className="text-sm font-bold uppercase tracking-[0.25em] text-indigo-300">
+                    AI Summary
+                  </p>
 
-                      <p className="mt-3 line-clamp-2 text-sm text-indigo-100/70">
-                        {email.snippet}
-                      </p>
-
-                      {email.hasSummary ? (
-                        <p className="mt-2 text-xs text-green-400">
-                          ✅ Summary Ready
-                        </p>
-                      ) : (
-                        <p className="mt-2 text-xs text-yellow-400">
-                          ⏳ Preparing Summary
-                        </p>
-                      )}
-                    </button>
-                  ))
-                )}
-              </div>
-            </section>
-
-            <aside className="flex min-h-0 flex-col overflow-hidden rounded-3xl border border-indigo-500/25 bg-[#0d0c24] shadow-2xl shadow-indigo-950/40">
-              <div className="shrink-0 flex items-center gap-3 border-b border-indigo-500/20 px-5 py-4">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-500/10 text-lg text-indigo-300">
-                  ⚙️
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-lg shadow-emerald-400/50" />
                 </div>
 
-                <p className="text-sm font-bold uppercase tracking-[0.25em] text-indigo-300">
-                  AI Summary
-                </p>
+                {!selectedEmail && !selectedSummary ? (
+                  <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 py-8 text-center">
+                    <div className="relative mb-9">
+                      <div className="absolute inset-0 rounded-full bg-indigo-500/40 blur-3xl" />
 
-                <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-lg shadow-emerald-400/50" />
-              </div>
+                      <div className="relative flex h-36 w-36 items-center justify-center rounded-full bg-gradient-to-br from-indigo-400 via-violet-600 to-purple-900 shadow-2xl shadow-purple-700/40">
+                        <span className="text-6xl drop-shadow-lg">✧</span>
+                        <span className="absolute right-10 top-9 text-2xl">
+                          ✦
+                        </span>
+                        <span className="absolute bottom-10 left-10 text-xl">
+                          ✦
+                        </span>
+                      </div>
+                    </div>
 
-              {!selectedEmail && !selectedSummary ? (
-                <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 py-8 text-center">
-                  <div className="relative mb-9">
-                    <div className="absolute inset-0 rounded-full bg-indigo-500/40 blur-3xl" />
+                    <h3 className="text-xl font-bold text-indigo-100">
+                      Select an email to activate AI
+                    </h3>
 
-                    <div className="relative flex h-36 w-36 items-center justify-center rounded-full bg-gradient-to-br from-indigo-400 via-violet-600 to-purple-900 shadow-2xl shadow-purple-700/40">
-                      <span className="text-6xl drop-shadow-lg">✧</span>
-                      <span className="absolute right-10 top-9 text-2xl">✦</span>
-                      <span className="absolute bottom-10 left-10 text-xl">✦</span>
+                    <p className="mt-3 max-w-sm text-sm text-indigo-300/70">
+                      Instant summaries, key points, action items, key dates and
+                      priority detection.
+                    </p>
+
+                    <div className="mt-7 flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-indigo-400" />
+                      <span className="h-2 w-2 rounded-full bg-indigo-500/70" />
+                      <span className="h-2 w-2 rounded-full bg-indigo-500/40" />
                     </div>
                   </div>
+                ) : (
+                  <div className="min-h-0 flex-1 overflow-y-auto p-5 overscroll-contain">
+                    <h2 className="mt-3 text-2xl font-bold">
+                      {selectedEmail?.subject || selectedSummary?.subject}
+                    </h2>
 
-                  <h3 className="text-xl font-bold text-indigo-100">
-                    Select an email to activate AI
-                  </h3>
-
-                  <p className="mt-3 max-w-sm text-sm text-indigo-300/70">
-                    Instant summaries, key points, action items, key dates and priority detection.
-                  </p>
-
-                  <div className="mt-7 flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-indigo-400" />
-                    <span className="h-2 w-2 rounded-full bg-indigo-500/70" />
-                    <span className="h-2 w-2 rounded-full bg-indigo-500/40" />
-                  </div>
-                </div>
-              ) : (
-                <div className="min-h-0 flex-1 overflow-y-auto p-5 overscroll-contain">
-                  <h2 className="mt-3 text-2xl font-bold">
-                    {selectedEmail?.subject || selectedSummary?.subject}
-                  </h2>
-
-                  <p className="mt-1 text-sm text-indigo-300/60">
-                    {selectedEmail?.from || selectedSummary?.from}
-                  </p>
-
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <p className="inline-flex rounded-full bg-indigo-500/10 px-3 py-1 text-xs text-indigo-100/70">
-                      {getCategoryLabel(getSelectedCategory())}
+                    <p className="mt-1 text-sm text-indigo-300/60">
+                      {selectedEmail?.from || selectedSummary?.from}
                     </p>
 
-                    <p
-                      className={`inline-flex rounded-full border px-3 py-1 text-xs ${getUrgencyStyle(
-                        urgency,
-                      )}`}
-                    >
-                      {getUrgencyLabel(urgency)}
-                    </p>
-                  </div>
-
-                  <div className="mt-6 rounded-xl bg-black/25 p-4">
-                    <h3 className="mb-3 font-semibold">📝 Summary</h3>
-
-                    {summaryLoading ? (
-                      <p className="text-indigo-100/70">Generating summary... cached summaries open instantly.</p>
-                    ) : (
-                      <p className="whitespace-pre-wrap text-indigo-100">
-                        {summary}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <p className="inline-flex rounded-full bg-indigo-500/10 px-3 py-1 text-xs text-indigo-100/70">
+                        {getCategoryLabel(getSelectedCategory())}
                       </p>
-                    )}
-                  </div>
 
-                  {!summaryLoading && (
-                    <>
-                      {renderInfoList("🎯 Key Takeaways", "No key takeaways found.", keyTakeaways)}
-                      {renderInfoList("🔎 Important Details", "No important details found.", importantDetails)}
-                      {renderInfoList("🔢 Key Numbers", "No key numbers found.", keyNumbers)}
-                      {renderInfoList("👥 People", "No people detected.", people)}
-                      {renderInfoList("🏢 Companies / Apps", "No companies detected.", companies)}
-                      {renderInfoList("🔗 Links", "No useful links found.", links)}
+                      <p
+                        className={`inline-flex rounded-full border px-3 py-1 text-xs ${getUrgencyStyle(
+                          urgency,
+                        )}`}
+                      >
+                        {getUrgencyLabel(urgency)}
+                      </p>
+                    </div>
 
-                      <div className="mt-4 rounded-xl bg-black/25 p-4">
-                        <h3 className="mb-3 font-semibold">
-                          📌 Action Items
-                        </h3>
+                    <div className="mt-6 rounded-xl bg-black/25 p-4">
+                      <h3 className="mb-3 font-semibold">📝 Summary</h3>
 
-                        {actionItems.length === 0 ? (
-                          <p className="text-sm text-indigo-300/60">
-                            No action items found.
-                          </p>
-                        ) : (
-                          <ul className="space-y-2 text-sm text-indigo-100">
-                            {actionItems.map((item, index) => (
-                              <li
-                                key={index}
-                                className="rounded-lg bg-indigo-500/10 p-3"
-                              >
-                                ☐ {item}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-
-                      <div className="mt-4 rounded-xl bg-black/25 p-4">
-                        <h3 className="mb-3 font-semibold">📅 Key Dates</h3>
-
-                        {keyDates.length === 0 ? (
-                          <p className="text-sm text-indigo-300/60">
-                            No key dates found.
-                          </p>
-                        ) : (
-                          <ul className="space-y-2 text-sm text-indigo-100">
-                            {keyDates.map((date, index) => (
-                              <li
-                                key={index}
-                                className="rounded-lg bg-indigo-500/10 p-3"
-                              >
-                                • {date}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-
-                      <div className="mt-4 rounded-xl bg-black/25 p-4">
-                        <h3 className="mb-3 font-semibold">⚡ Urgency</h3>
-
-                        <p
-                          className={`inline-flex rounded-full border px-4 py-2 text-sm font-semibold ${getUrgencyStyle(
-                            urgency,
-                          )}`}
-                        >
-                          {getUrgencyLabel(urgency)}
+                      {summaryLoading ? (
+                        <p className="text-indigo-100/70">
+                          Generating summary... cached summaries open instantly.
                         </p>
-                      </div>
-                    </>
-                  )}
+                      ) : (
+                        <p className="whitespace-pre-wrap text-indigo-100">
+                          {summary}
+                        </p>
+                      )}
+                    </div>
 
-                  <div className="mt-5 flex flex-wrap gap-3">
-                    <button
-                      onClick={copySummary}
-                      disabled={!summary || summaryLoading}
-                      className={`rounded-xl px-4 py-2 font-medium transition ${
-                        summary && !summaryLoading
-                          ? "bg-green-600 text-white hover:bg-green-500"
-                          : "cursor-not-allowed bg-gray-700 text-indigo-300/60"
-                      }`}
-                    >
-                      {copied ? "✅ Copied!" : "📋 Copy AI Summary"}
-                    </button>
+                    {!summaryLoading && (
+                      <>
+                        {renderInfoList(
+                          "🎯 Key Takeaways",
+                          "No key takeaways found.",
+                          keyTakeaways,
+                        )}
+                        {renderInfoList(
+                          "🔎 Important Details",
+                          "No important details found.",
+                          importantDetails,
+                        )}
+                        {renderInfoList(
+                          "🔢 Key Numbers",
+                          "No key numbers found.",
+                          keyNumbers,
+                        )}
+                        {renderInfoList(
+                          "👥 People",
+                          "No people detected.",
+                          people,
+                        )}
+                        {renderInfoList(
+                          "🏢 Companies / Apps",
+                          "No companies detected.",
+                          companies,
+                        )}
+                        {renderInfoList(
+                          "🔗 Links",
+                          "No useful links found.",
+                          links,
+                        )}
 
-                    <button
-                      onClick={unsubscribeSelectedEmail}
-                      disabled={!hasSelectedEmail || unsubscribing}
-                      className={`rounded-xl px-4 py-2 font-medium transition ${
-                        hasSelectedEmail && !unsubscribing
-                          ? "bg-orange-600 text-white hover:bg-orange-500"
-                          : "cursor-not-allowed bg-gray-700 text-indigo-300/60"
-                      }`}
-                    >
-                      {unsubscribing ? "Unsubscribing..." : "🚫 Unsubscribe"}
-                    </button>
+                        <div className="mt-4 rounded-xl bg-black/25 p-4">
+                          <h3 className="mb-3 font-semibold">
+                            📌 Action Items
+                          </h3>
 
-                    {selectedSummary && (
+                          {actionItems.length === 0 ? (
+                            <p className="text-sm text-indigo-300/60">
+                              No action items found.
+                            </p>
+                          ) : (
+                            <ul className="space-y-2 text-sm text-indigo-100">
+                              {actionItems.map((item, index) => (
+                                <li
+                                  key={index}
+                                  className="rounded-lg bg-indigo-500/10 p-3"
+                                >
+                                  ☐ {item}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+
+                        <div className="mt-4 rounded-xl bg-black/25 p-4">
+                          <h3 className="mb-3 font-semibold">📅 Key Dates</h3>
+
+                          {keyDates.length === 0 ? (
+                            <p className="text-sm text-indigo-300/60">
+                              No key dates found.
+                            </p>
+                          ) : (
+                            <ul className="space-y-2 text-sm text-indigo-100">
+                              {keyDates.map((date, index) => (
+                                <li
+                                  key={index}
+                                  className="rounded-lg bg-indigo-500/10 p-3"
+                                >
+                                  • {date}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+
+                        <div className="mt-4 rounded-xl bg-black/25 p-4">
+                          <h3 className="mb-3 font-semibold">⚡ Urgency</h3>
+
+                          <p
+                            className={`inline-flex rounded-full border px-4 py-2 text-sm font-semibold ${getUrgencyStyle(
+                              urgency,
+                            )}`}
+                          >
+                            {getUrgencyLabel(urgency)}
+                          </p>
+                        </div>
+                      </>
+                    )}
+
+                    <div className="mt-5 flex flex-wrap gap-3">
                       <button
-                        onClick={() => deleteSummary(selectedSummary.id)}
-                        disabled={deletingSummary}
-                        className={`rounded-xl px-4 py-2 text-white ${
-                          deletingSummary
-                            ? "cursor-not-allowed bg-red-600/50"
-                            : "bg-red-600 hover:bg-red-500"
+                        onClick={copySummary}
+                        disabled={!summary || summaryLoading}
+                        className={`rounded-xl px-4 py-2 font-medium transition ${
+                          summary && !summaryLoading
+                            ? "bg-green-600 text-white hover:bg-green-500"
+                            : "cursor-not-allowed bg-gray-700 text-indigo-300/60"
                         }`}
                       >
-                        {deletingSummary ? "Deleting..." : "Delete Summary"}
+                        {copied ? "✅ Copied!" : "📋 Copy AI Summary"}
                       </button>
-                    )}
 
-                    <button
-                      onClick={clearSelection}
-                      className="rounded-xl bg-blue-600 px-4 py-2 text-white hover:bg-blue-500"
-                    >
-                      Clear Selection
-                    </button>
+                      <button
+                        onClick={unsubscribeSelectedEmail}
+                        disabled={!hasSelectedEmail || unsubscribing}
+                        className={`rounded-xl px-4 py-2 font-medium transition ${
+                          hasSelectedEmail && !unsubscribing
+                            ? "bg-orange-600 text-white hover:bg-orange-500"
+                            : "cursor-not-allowed bg-gray-700 text-indigo-300/60"
+                        }`}
+                      >
+                        {unsubscribing ? "Unsubscribing..." : "🚫 Unsubscribe"}
+                      </button>
+
+                      {selectedSummary && (
+                        <button
+                          onClick={() => deleteSummary(selectedSummary.id)}
+                          disabled={deletingSummary}
+                          className={`rounded-xl px-4 py-2 text-white ${
+                            deletingSummary
+                              ? "cursor-not-allowed bg-red-600/50"
+                              : "bg-red-600 hover:bg-red-500"
+                          }`}
+                        >
+                          {deletingSummary ? "Deleting..." : "Delete Summary"}
+                        </button>
+                      )}
+
+                      <button
+                        onClick={clearSelection}
+                        className="rounded-xl bg-blue-600 px-4 py-2 text-white hover:bg-blue-500"
+                      >
+                        Clear Selection
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
-            </aside>
-          </div>
+                )}
+              </aside>
+            </div>
           </div>
         </section>
       </div>

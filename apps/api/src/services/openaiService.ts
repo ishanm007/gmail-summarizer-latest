@@ -160,13 +160,48 @@ function normalizeCategory(raw: string): EmailCategory {
     return normalized as EmailCategory;
   }
 
-  if (/SPAM|UNWANTED|SCAM|JUNK|BULK|COMMERCIAL|SUSPICIOUS|PHISHING/.test(normalized)) return "SPAM";
-  if (/NEWSLETTER|DIGEST|SUBSTACK|MEDIUM|BLOG|ARTICLE|BRIEFING|CREATOR/.test(normalized)) return "PERSONAL";
-  if (/PROMO|OFFER|DEAL|SALE|PROMOTION|ADVERTISE|ADVERTISEMENT|AD/.test(normalized)) return "PROMOTIONS";
-  if (/SHOP|ORDER|PURCHASE|RECEIPT|DELIVERY|DELIVERED|TRACKING|SHIPMENT/.test(normalized)) return "SHOPPING";
-  if (/BILL|INVOICE|PAYMENT|PAID|BANK|STATEMENT|FINANCE|ACCOUNT|REFUND|DEPOSIT|WITHDRAWAL|TRANSFER|SALARY|TRANSACTION|AMOUNT|UPI|DEBIT|CREDIT/.test(normalized)) return "FINANCE";
-  if (/ATTENTION|GOVERNMENT|TAX|LEGAL|COMPLIANCE|OFFICIAL|NOTICE|ITR|COURT|SECURITY|KYC|OTP/.test(normalized)) return "ATTENTION_NEEDED";
-  if (/WORK|JOB|PROJECT|CLIENT|COLLEAGUE|TEAM|OFFICE|TASK|MEETING|DEADLINE|REPORT|AGENDA/.test(normalized)) return "WORK";
+  if (
+    /SPAM|UNWANTED|SCAM|JUNK|BULK|COMMERCIAL|SUSPICIOUS|PHISHING/.test(
+      normalized,
+    )
+  )
+    return "SPAM";
+  if (
+    /NEWSLETTER|DIGEST|SUBSTACK|MEDIUM|BLOG|ARTICLE|BRIEFING|CREATOR/.test(
+      normalized,
+    )
+  )
+    return "PERSONAL";
+  if (
+    /PROMO|OFFER|DEAL|SALE|PROMOTION|ADVERTISE|ADVERTISEMENT|AD/.test(
+      normalized,
+    )
+  )
+    return "PROMOTIONS";
+  if (
+    /SHOP|ORDER|PURCHASE|RECEIPT|DELIVERY|DELIVERED|TRACKING|SHIPMENT/.test(
+      normalized,
+    )
+  )
+    return "SHOPPING";
+  if (
+    /BILL|INVOICE|PAYMENT|PAID|BANK|STATEMENT|FINANCE|ACCOUNT|REFUND|DEPOSIT|WITHDRAWAL|TRANSFER|SALARY|TRANSACTION|AMOUNT|UPI|DEBIT|CREDIT/.test(
+      normalized,
+    )
+  )
+    return "FINANCE";
+  if (
+    /ATTENTION|GOVERNMENT|TAX|LEGAL|COMPLIANCE|OFFICIAL|NOTICE|ITR|COURT|SECURITY|KYC|OTP/.test(
+      normalized,
+    )
+  )
+    return "ATTENTION_NEEDED";
+  if (
+    /WORK|JOB|PROJECT|CLIENT|COLLEAGUE|TEAM|OFFICE|TASK|MEETING|DEADLINE|REPORT|AGENDA/.test(
+      normalized,
+    )
+  )
+    return "WORK";
 
   return "PERSONAL";
 }
@@ -174,7 +209,8 @@ function normalizeCategory(raw: string): EmailCategory {
 function normalizeUrgency(raw: unknown): EmailUrgency {
   if (typeof raw !== "string") return "LOW";
   const normalized = raw.trim().toUpperCase();
-  if (URGENCY_VALUES.includes(normalized as EmailUrgency)) return normalized as EmailUrgency;
+  if (URGENCY_VALUES.includes(normalized as EmailUrgency))
+    return normalized as EmailUrgency;
   return "LOW";
 }
 
@@ -191,7 +227,11 @@ function getEmailText(email: BasicEmail) {
 }
 
 function normalizeDomain(domain: string) {
-  return domain.trim().toLowerCase().replace(/^@+/, "").replace(/^www\./, "");
+  return domain
+    .trim()
+    .toLowerCase()
+    .replace(/^@+/, "")
+    .replace(/^www\./, "");
 }
 
 function extractEmailAddress(from: string) {
@@ -216,7 +256,11 @@ function domainMatches(senderDomain: string, domains: string[] = []) {
 
   return domains.some((domain) => {
     const normalized = normalizeDomain(domain);
-    return Boolean(normalized) && (normalizedSender === normalized || normalizedSender.endsWith(`.${normalized}`));
+    return (
+      Boolean(normalized) &&
+      (normalizedSender === normalized ||
+        normalizedSender.endsWith(`.${normalized}`))
+    );
   });
 }
 
@@ -241,7 +285,10 @@ Profile rules:
 `;
 }
 
-function applyProfileRules(email: BasicEmail, profile?: UserProfileContext): RuleHit | null {
+function applyProfileRules(
+  email: BasicEmail,
+  profile?: UserProfileContext,
+): RuleHit | null {
   if (!profile) return null;
 
   const senderDomain = extractSenderDomain(email.from || "");
@@ -273,32 +320,68 @@ function applyProfileRules(email: BasicEmail, profile?: UserProfileContext): Rul
     /\binr\s?\d+/i,
   ];
 
-  if (domainMatches(senderDomain, profile.newsletterDomains || []) && !hasAny(lower, criticalPatterns)) {
-    return { category: "PERSONAL", confidence: 98, reason: "user-confirmed newsletter domain" };
+  if (
+    domainMatches(senderDomain, profile.newsletterDomains || []) &&
+    !hasAny(lower, criticalPatterns)
+  ) {
+    return {
+      category: "PERSONAL",
+      confidence: 98,
+      reason: "user-confirmed newsletter domain",
+    };
   }
 
   if (domainMatches(senderDomain, profile.workDomains || [])) {
     if (hasAny(lower, criticalPatterns)) {
-      return { category: "ATTENTION_NEEDED", confidence: 98, reason: "critical work-domain alert" };
+      return {
+        category: "ATTENTION_NEEDED",
+        confidence: 98,
+        reason: "critical work-domain alert",
+      };
     }
 
     if (hasAny(lower, financeLikePatterns)) {
-      return { category: "FINANCE", confidence: 94, reason: "finance content from work domain" };
+      return {
+        category: "FINANCE",
+        confidence: 94,
+        reason: "finance content from work domain",
+      };
     }
 
     if (isNewsletterEmail(email)) {
-      return { category: "PERSONAL", confidence: 96, reason: "newsletter from work domain" };
+      return {
+        category: "PERSONAL",
+        confidence: 96,
+        reason: "newsletter from work domain",
+      };
     }
 
-    return { category: "WORK", confidence: 97, reason: "user-confirmed work domain" };
+    return {
+      category: "WORK",
+      confidence: 97,
+      reason: "user-confirmed work domain",
+    };
   }
 
   if (domainMatches(senderDomain, profile.studyDomains || [])) {
-    if (hasAny(lower, criticalPatterns) || /\b(assignment|exam|deadline|submission|result|admit card|fee due|attendance)\b/i.test(lower)) {
-      return { category: "ATTENTION_NEEDED", confidence: 96, reason: "study-domain action item" };
+    if (
+      hasAny(lower, criticalPatterns) ||
+      /\b(assignment|exam|deadline|submission|result|admit card|fee due|attendance)\b/i.test(
+        lower,
+      )
+    ) {
+      return {
+        category: "ATTENTION_NEEDED",
+        confidence: 96,
+        reason: "study-domain action item",
+      };
     }
 
-    return { category: "PERSONAL", confidence: 92, reason: "user-confirmed study domain" };
+    return {
+      category: "PERSONAL",
+      confidence: 92,
+      reason: "user-confirmed study domain",
+    };
   }
 
   return null;
@@ -313,7 +396,6 @@ function getContentForAi(email: BasicEmail) {
 function hasAny(text: string, patterns: RegExp[]) {
   return patterns.some((pattern) => pattern.test(text));
 }
-
 
 function isNewsletterEmail(email: BasicEmail) {
   const text = getEmailText(email).toLowerCase();
@@ -359,12 +441,16 @@ function isNewsletterEmail(email: BasicEmail) {
   ];
 
   return (
-    (hasAny(sender, newsletterSenderPatterns) || hasAny(text, newsletterContentPatterns)) &&
+    (hasAny(sender, newsletterSenderPatterns) ||
+      hasAny(text, newsletterContentPatterns)) &&
     !hasAny(text, strongNonNewsletterPatterns)
   );
 }
 
-function classifyByRules(email: BasicEmail, profile?: UserProfileContext): RuleHit {
+function classifyByRules(
+  email: BasicEmail,
+  profile?: UserProfileContext,
+): RuleHit {
   const profileHit = applyProfileRules(email, profile);
   if (profileHit) return profileHit;
   const text = getEmailText(email);
@@ -388,6 +474,20 @@ function classifyByRules(email: BasicEmail, profile?: UserProfileContext): RuleH
   ];
 
   const financePatterns = [
+    /\bmoney received\b/i,
+    /\bmoney sent\b/i,
+    /\byou received\b.*\bmoney\b/i,
+    /\byou sent\b.*\bmoney\b/i,
+    /\bamount received\b/i,
+    /\bamount sent\b/i,
+    /\breceived ₹\s?\d+/i,
+    /\bsent ₹\s?\d+/i,
+    /\bcredited to your account\b/i,
+    /\bdebited from your account\b/i,
+    /\bpayment received\b/i,
+    /\bpayment sent\b/i,
+    /\btransfer received\b/i,
+    /\btransfer sent\b/i,
     /\bpayment\b.*\b(success|successful|completed|received|sent|done|failed|declined|pending|processed)\b/i,
     /\b(success|successful|completed|failed|declined|pending)\b.*\bpayment\b/i,
     /\bpaid\b/i,
@@ -548,7 +648,19 @@ function classifyByRules(email: BasicEmail, profile?: UserProfileContext): RuleH
     /\bview in browser\b/i,
   ];
 
-  if (hasAny(lower, spamPatterns)) return { category: "SPAM", confidence: 98, reason: "clear spam/scam keywords" };
+  if (hasAny(lower, spamPatterns))
+    return {
+      category: "SPAM",
+      confidence: 98,
+      reason: "clear spam/scam keywords",
+    };
+
+  if (hasAny(lower, financePatterns))
+    return {
+      category: "FINANCE",
+      confidence: 97,
+      reason: "real payment/transaction/finance content",
+    };
 
   if (isNewsletterEmail(email)) {
     const salesOnlyPatterns = [
@@ -556,124 +668,219 @@ function classifyByRules(email: BasicEmail, profile?: UserProfileContext): RuleH
     ];
 
     if (hasAny(lower, salesOnlyPatterns)) {
-      return { category: "PROMOTIONS", confidence: 94, reason: "newsletter is mainly promotional/sales content" };
+      return {
+        category: "PROMOTIONS",
+        confidence: 94,
+        reason: "newsletter is mainly promotional/sales content",
+      };
     }
 
-    return { category: "PERSONAL", confidence: 96, reason: "newsletter/digest/article/content email" };
+    return {
+      category: "PERSONAL",
+      confidence: 96,
+      reason: "newsletter/digest/article/content email",
+    };
   }
 
-  if (hasAny(lower, financePatterns)) return { category: "FINANCE", confidence: 97, reason: "real payment/transaction/finance content" };
-
-  if (hasAny(sender, financeSenderPatterns) && !hasAny(lower, promotionPatterns)) {
-    if (hasAny(lower, [/\baccount\b/i, /\bwallet\b/i, /\bbalance\b/i, /\bpayment\b/i, /\bupi\b/i, /₹\s?\d+/i])) {
-      return { category: "FINANCE", confidence: 92, reason: "financial sender with account/payment content" };
+  if (
+    hasAny(sender, financeSenderPatterns) &&
+    !hasAny(lower, promotionPatterns)
+  ) {
+    if (
+      hasAny(lower, [
+        /\baccount\b/i,
+        /\bwallet\b/i,
+        /\bbalance\b/i,
+        /\bpayment\b/i,
+        /\bupi\b/i,
+        /₹\s?\d+/i,
+      ])
+    ) {
+      return {
+        category: "FINANCE",
+        confidence: 92,
+        reason: "financial sender with account/payment content",
+      };
     }
   }
 
   if (hasAny(lower, attentionPatterns)) {
-    if (hasAny(lower, promotionPatterns) && !/\b(otp|kyc|pan|aadhaar|security alert|account locked|tax|itr|legal|court|government|passport|visa)\b/i.test(lower)) {
-      return { category: "PROMOTIONS", confidence: 93, reason: "marketing phrasing, not genuine action required" };
+    if (
+      hasAny(lower, promotionPatterns) &&
+      !/\b(otp|kyc|pan|aadhaar|security alert|account locked|tax|itr|legal|court|government|passport|visa)\b/i.test(
+        lower,
+      )
+    ) {
+      return {
+        category: "PROMOTIONS",
+        confidence: 93,
+        reason: "marketing phrasing, not genuine action required",
+      };
     }
 
-    return { category: "ATTENTION_NEEDED", confidence: 95, reason: "official/security/account action content" };
+    return {
+      category: "ATTENTION_NEEDED",
+      confidence: 95,
+      reason: "official/security/account action content",
+    };
   }
 
-  if (hasAny(lower, shoppingPatterns)) return { category: "SHOPPING", confidence: 94, reason: "order/delivery/shipping content" };
-  if (hasAny(sender, shoppingSenderPatterns) && !hasAny(lower, promotionPatterns)) return { category: "SHOPPING", confidence: 85, reason: "shopping sender without promotional content" };
-  if (hasAny(lower, workPatterns)) return { category: "WORK", confidence: 88, reason: "work/project/meeting content" };
-  if (hasAny(lower, promotionPatterns)) return { category: "PROMOTIONS", confidence: 90, reason: "marketing/offer/newsletter/content update" };
+  if (hasAny(lower, shoppingPatterns))
+    return {
+      category: "SHOPPING",
+      confidence: 94,
+      reason: "order/delivery/shipping content",
+    };
+  if (
+    hasAny(sender, shoppingSenderPatterns) &&
+    !hasAny(lower, promotionPatterns)
+  )
+    return {
+      category: "SHOPPING",
+      confidence: 85,
+      reason: "shopping sender without promotional content",
+    };
+  if (hasAny(lower, workPatterns))
+    return {
+      category: "WORK",
+      confidence: 88,
+      reason: "work/project/meeting content",
+    };
+  if (hasAny(lower, promotionPatterns))
+    return {
+      category: "PROMOTIONS",
+      confidence: 90,
+      reason: "marketing/offer/newsletter/content update",
+    };
 
-  return { category: "PERSONAL", confidence: 45, reason: "no strong category match" };
+  return {
+    category: "PERSONAL",
+    confidence: 45,
+    reason: "no strong category match",
+  };
 }
 
-function classifyByKeywords(email: BasicEmail, profile?: UserProfileContext): EmailCategory {
+function classifyByKeywords(
+  email: BasicEmail,
+  profile?: UserProfileContext,
+): EmailCategory {
   return classifyByRules(email, profile).category;
 }
 
-function calculateUrgencyByRules(email: BasicEmail, category: EmailCategory, profile?: UserProfileContext): EmailUrgency {
+function calculateUrgencyByRules(
+  email: BasicEmail,
+  category: EmailCategory,
+  profile?: UserProfileContext,
+): EmailUrgency {
   const text = getEmailText(email).toUpperCase();
 
   if (category === "SPAM" || category === "PROMOTIONS") return "LOW";
   if (isNewsletterEmail(email)) return "LOW";
 
   const senderDomain = extractSenderDomain(email.from || "");
-  if (profile && domainMatches(senderDomain, profile.newsletterDomains || [])) return "LOW";
+  if (profile && domainMatches(senderDomain, profile.newsletterDomains || []))
+    return "LOW";
 
   if (category === "SHOPPING") {
-    if (/(FAILED DELIVERY|DELIVERY FAILED|RETURN|EXCHANGE|CANCELLED|PAYMENT FAILED)/.test(text)) return "MEDIUM";
+    if (
+      /(FAILED DELIVERY|DELIVERY FAILED|RETURN|EXCHANGE|CANCELLED|PAYMENT FAILED)/.test(
+        text,
+      )
+    )
+      return "MEDIUM";
     return "LOW";
   }
 
   if (category === "FINANCE") {
-    if (/(FAILED|DECLINED|OVERDUE|DUE TODAY|PAYMENT DUE|ACTION REQUIRED|ACCOUNT LOCKED|SUSPICIOUS TRANSACTION|UNAUTHORIZED|FRAUD|CHARGEBACK)/.test(text)) return "HIGH";
+    if (
+      /(FAILED|DECLINED|OVERDUE|DUE TODAY|PAYMENT DUE|ACTION REQUIRED|ACCOUNT LOCKED|SUSPICIOUS TRANSACTION|UNAUTHORIZED|FRAUD|CHARGEBACK)/.test(
+        text,
+      )
+    ) {
+      return "HIGH";
+    }
+
     return "MEDIUM";
   }
 
-  if (category === "ATTENTION_NEEDED") return "HIGH";
+  if (category === "ATTENTION_NEEDED") {
+    if (
+      /(OTP|ONE TIME PASSWORD|VERIFICATION CODE|NEW LOGIN|LOGIN ATTEMPT|PASSWORD RESET)/.test(
+        text,
+      )
+    ) {
+      return "MEDIUM";
+    }
+
+    return "HIGH";
+  }
 
   if (category === "WORK") {
-    if (/(URGENT|ASAP|DUE TODAY|DEADLINE|ACTION REQUIRED|PLEASE RESPOND|FINAL REMINDER|ESCALATION|TODAY|TOMORROW)/.test(text)) return "HIGH";
+    if (
+      /(URGENT|ASAP|DUE TODAY|DEADLINE|ACTION REQUIRED|PLEASE RESPOND|FINAL REMINDER|ESCALATION|TODAY|TOMORROW)/.test(
+        text,
+      )
+    )
+      return "HIGH";
     return "MEDIUM";
   }
 
   return "LOW";
 }
 
-function chooseFinalCategory(aiCategory: EmailCategory, ruleHit: RuleHit): EmailCategory {
+function chooseFinalCategory(
+  aiCategory: EmailCategory,
+  ruleHit: RuleHit,
+): EmailCategory {
   if (ruleHit.confidence >= 85) return ruleHit.category;
-  if ((ruleHit.category === "SPAM" || ruleHit.category === "PROMOTIONS" || ruleHit.category === "PERSONAL") && aiCategory === "ATTENTION_NEEDED") return ruleHit.category;
-  if (ruleHit.category === "FINANCE" && aiCategory === "PROMOTIONS") return "FINANCE";
-  if (aiCategory === "PERSONAL" && ruleHit.category !== "PERSONAL") return ruleHit.category;
+  if (
+    (ruleHit.category === "SPAM" ||
+      ruleHit.category === "PROMOTIONS" ||
+      ruleHit.category === "PERSONAL") &&
+    aiCategory === "ATTENTION_NEEDED"
+  )
+    return ruleHit.category;
+  if (ruleHit.category === "FINANCE" && aiCategory === "PROMOTIONS")
+    return "FINANCE";
+  if (aiCategory === "PERSONAL" && ruleHit.category !== "PERSONAL")
+    return ruleHit.category;
   return aiCategory;
 }
 
-export async function classifyEmailCategory(email: BasicEmail, profile?: UserProfileContext): Promise<EmailCategory> {
-  const ruleHit = classifyByRules(email, profile);
+export async function classifyEmailCategory(
+  email: BasicEmail,
+  profile?: UserProfileContext,
+): Promise<EmailCategory> {
+  // v1.1 performance rule: GPT never classifies.
+  // Categories are deterministic and shared by inbox, summary, and saved views.
+  return classifyByRules(email, profile).category;
+}
 
-  if (ruleHit.confidence >= 92) {
-    console.log(`[Rule Classification] ${email.subject} -> ${ruleHit.category} (${ruleHit.reason})`);
-    return ruleHit.category;
-  }
+export function classifyEmailCategorySync(
+  email: BasicEmail,
+  profile?: UserProfileContext,
+): EmailCategory {
+  return classifyByRules(email, profile).category;
+}
 
-  try {
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: CLASSIFIER_SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: `${CLASSIFIER_USER_PROMPT}
-
-${buildUserProfilePrompt(profile)}
-
-Rule engine suggestion:
-Category: ${ruleHit.category}
-Confidence: ${ruleHit.confidence}
-Reason: ${ruleHit.reason}
-
-Email:
-From: ${email.from}
-Subject: ${email.subject}
-Snippet: ${email.snippet}
-Body: ${getContentForAi(email).slice(0, 4000)}`,
-        },
-      ],
-      max_tokens: 20,
-      temperature: 0,
-    });
-
-    const rawCategory = completion.choices[0].message.content || "PERSONAL";
-    const explicit = CATEGORY_VALUES.find((value) => new RegExp(`\\b${value}\\b`, "i").test(rawCategory));
-    const aiCategory = explicit ? explicit : normalizeCategory(rawCategory);
-
-    return chooseFinalCategory(aiCategory, ruleHit);
-  } catch (error) {
-    console.error("[AI Classification Error]", error);
-    return ruleHit.category;
-  }
+export function calculateEmailUrgency(
+  email: BasicEmail,
+  category?: EmailCategory,
+  profile?: UserProfileContext,
+): EmailUrgency {
+  const finalCategory = category || classifyByRules(email, profile).category;
+  return calculateUrgencyByRules(email, finalCategory, profile);
 }
 
 function parseJsonObject(content: string) {
+  if (!content) return null;
+
+  try {
+    return JSON.parse(content);
+  } catch {
+    // continue below
+  }
+
   const match = content.match(/\{[\s\S]*\}/);
   if (!match) return null;
 
@@ -687,14 +894,27 @@ function parseJsonObject(content: string) {
 function cleanSummaryText(rawSummary: string, rawAiContent?: string) {
   const trimmed = (rawSummary || "").trim();
 
-  if (!trimmed && rawAiContent) {
-    const parsed = parseJsonObject(rawAiContent);
-    if (parsed && typeof parsed.summary === "string") return parsed.summary.trim();
+  const parsedFromSummary = parseJsonObject(trimmed);
+  if (parsedFromSummary && typeof parsedFromSummary.summary === "string") {
+    return parsedFromSummary.summary.trim();
+  }
+
+  if (rawAiContent) {
+    const parsedFromRaw = parseJsonObject(rawAiContent);
+    if (parsedFromRaw && typeof parsedFromRaw.summary === "string") {
+      return parsedFromRaw.summary.trim();
+    }
   }
 
   if (trimmed.startsWith("{") && trimmed.includes('"summary"')) {
-    const parsed = parseJsonObject(trimmed);
-    if (parsed && typeof parsed.summary === "string") return parsed.summary.trim();
+    const regexMatch = trimmed.match(
+      /"summary"\s*:\s*"([\s\S]*?)"\s*,\s*"keyTakeaways"/,
+    );
+    if (regexMatch?.[1]) {
+      return regexMatch[1].replace(/\\"/g, '"').replace(/\\n/g, "\n").trim();
+    }
+
+    return "Summary generated, but the response format could not be cleaned properly.";
   }
 
   return trimmed;
@@ -703,10 +923,17 @@ function cleanSummaryText(rawSummary: string, rawAiContent?: string) {
 function buildFallbackRichSummary(email: BasicEmail, category: EmailCategory) {
   const urgency = calculateUrgencyByRules(email, category);
   const text = getContentForAi(email).trim();
-  const summarySource = text || email.snippet || email.subject || "No readable email content was available.";
+  const summarySource =
+    text ||
+    email.snippet ||
+    email.subject ||
+    "No readable email content was available.";
 
   return {
-    summary: summarySource.length > 500 ? `${summarySource.slice(0, 500).trim()}...` : summarySource,
+    summary:
+      summarySource.length > 500
+        ? `${summarySource.slice(0, 500).trim()}...`
+        : summarySource,
     category,
     actionItems: [],
     keyDates: [],
@@ -720,14 +947,21 @@ function buildFallbackRichSummary(email: BasicEmail, category: EmailCategory) {
   };
 }
 
-export async function summarizeAndClassifyEmail(email: BasicEmail, profile?: UserProfileContext) {
+export async function summarizeAndClassifyEmail(
+  email: BasicEmail,
+  profile?: UserProfileContext,
+) {
   // IMPORTANT: GPT is no longer allowed to decide category or urgency here.
   // The email-list rule engine is the single source of truth for tags.
   // This prevents mismatches like: Email List = FINANCE, AI Summary = PERSONAL.
   const ruleHit = classifyByRules(email, profile);
   const category: EmailCategory = ruleHit.category;
-  const urgency: EmailUrgency = calculateUrgencyByRules(email, category, profile);
-  const contentForAi = getContentForAi(email).slice(0, 5500);
+  const urgency: EmailUrgency = calculateUrgencyByRules(
+    email,
+    category,
+    profile,
+  );
+  const contentForAi = getContentForAi(email).slice(0, 4200);
 
   try {
     const completion = await client.chat.completions.create({
@@ -752,7 +986,7 @@ Full email content:
 ${contentForAi}`,
         },
       ],
-      max_tokens: 550,
+      max_tokens: 420,
       temperature: 0,
       response_format: { type: "json_object" },
     });
@@ -760,7 +994,8 @@ ${contentForAi}`,
     const raw = completion.choices[0].message.content || "";
     const parsed = parseJsonObject(raw);
 
-    let summary = cleanSummaryText(raw, raw) || "No useful summary could be generated.";
+    let summary =
+      cleanSummaryText(raw, raw) || "No useful summary could be generated.";
     let actionItems: string[] = [];
     let keyDates: string[] = [];
     let keyTakeaways: string[] = [];
@@ -824,7 +1059,10 @@ Body: ${(email.body || "").slice(0, 2500)}`,
         content:
           "You are an AI assistant that summarizes unread emails into useful bullet points with concrete facts, dates, amounts, names, and action items. Do not treat spam or promotions as urgent.",
       },
-      { role: "user", content: `Summarize these unread emails:\n\n${emailText}` },
+      {
+        role: "user",
+        content: `Summarize these unread emails:\n\n${emailText}`,
+      },
     ],
     temperature: 0.2,
   });
@@ -857,7 +1095,7 @@ export async function summarizeWeeklyEmails(emails: BasicEmail[]) {
 From: ${email.from}
 Subject: ${email.subject}
 Snippet: ${email.snippet}
-Body: ${(email.body || "").slice(0, 3000)}`,
+Body: ${(email.body || "").slice(0, 1200)}`,
     )
     .join("\n\n");
 
@@ -865,9 +1103,12 @@ Body: ${(email.body || "").slice(0, 3000)}`,
     model: "gpt-4o-mini",
     messages: [
       { role: "system", content: WEEKLY_REPORT_SYSTEM_PROMPT },
-      { role: "user", content: `Create a weekly email report from these emails:\n\n${emailText}` },
+      {
+        role: "user",
+        content: `Create a weekly email report from these emails:\n\n${emailText}`,
+      },
     ],
-    max_tokens: 1100,
+    max_tokens: 750,
     temperature: 0,
     response_format: { type: "json_object" },
   });
@@ -888,12 +1129,18 @@ Body: ${(email.body || "").slice(0, 3000)}`,
   }
 
   return {
-    summary: typeof parsed.summary === "string" ? parsed.summary : "Weekly report generated.",
+    summary:
+      typeof parsed.summary === "string"
+        ? parsed.summary
+        : "Weekly report generated.",
     importantEmails: normalizeStringArray(parsed.importantEmails),
     actionItems: normalizeStringArray(parsed.actionItems),
     financeUpdates: normalizeStringArray(parsed.financeUpdates),
     shoppingUpdates: normalizeStringArray(parsed.shoppingUpdates),
     workUpdates: normalizeStringArray(parsed.workUpdates),
-    promotionsSummary: typeof parsed.promotionsSummary === "string" ? parsed.promotionsSummary : "",
+    promotionsSummary:
+      typeof parsed.promotionsSummary === "string"
+        ? parsed.promotionsSummary
+        : "",
   };
 }
