@@ -14,6 +14,7 @@ type Email = {
   category?: string;
   hasSummary?: boolean;
   savedSummary?: string | null;
+  priorityLevel?: string;
   urgency?: string;
   unsubscribeAvailable?: boolean;
 };
