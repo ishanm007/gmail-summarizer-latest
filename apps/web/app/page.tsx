@@ -1132,7 +1132,7 @@ export default function Home() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#0b1220] px-4 text-white">
         <div className="w-full max-w-md rounded-3xl border border-[#24214a] bg-[#111827] p-8 shadow-2xl">
-          <h1 className="text-3xl font-bold">Gmail Summarizer</h1>
+          <h1 className="text-3xl font-bold">Inbix AI</h1>
 
           <p className="mt-3 text-indigo-300/60">
             Connect your Gmail and get clear AI summaries of important emails.
@@ -1158,7 +1158,7 @@ export default function Home() {
               AI Inbox Setup
             </p>
             <h1 className="mt-3 text-4xl font-black tracking-tight md:text-5xl">
-              Let Gmail Summarizer understand you.
+              Let Inbix AI understand you.
             </h1>
             <p className="mx-auto mt-3 max-w-2xl text-indigo-200/65">
               A quick interactive setup so emails from work, college,
@@ -1330,7 +1330,7 @@ export default function Home() {
                             </p>
                           </div>
 
-                          <div className="grid grid-cols-4 gap-2">
+                          <div className="flex flex-wrap gap-2">
                             {[
                                 ["WORK", "💼 Work"],
                                 ["UNIVERSITY", "🎓 University"],
@@ -1416,21 +1416,20 @@ export default function Home() {
     <main className="h-screen overflow-hidden bg-[#050513] text-white">
       <div className="grid h-screen min-h-0 grid-cols-1 overflow-hidden md:grid-cols-[clamp(260px,19vw,335px)_1fr]">
         <aside className="relative hidden h-screen min-h-0 flex-col overflow-hidden border-r border-[#24214a] bg-[#09091d] p-4 shadow-2xl shadow-black/40 md:flex">
-          <div className="mb-5 flex shrink-0 items-center gap-3">
-            <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-gradient-to-br from-blue-500 to-violet-600 text-3xl shadow-xl shadow-violet-500/30">
-              ⚡
-            </div>
+              <img
+                src="/inbix-logo.png"
+                className="h-40 w-200 object-contain"
+                alt="Inbix"
+              />
+            
 
-            <div>
-              <h1 className="text-lg font-black tracking-tight">
-                Gmail Summarizer
-              </h1>
-              <p className="mt-1 font-mono text-sm tracking-[0.25em] text-indigo-400">
-                v1.1 · active
-              </p>
-            </div>
-          </div>
+            <div className="min-w-0">
+              
 
+              
+            </div>
+          
+        
           <nav className="shrink-0 space-y-2">
             {[
               ["inbox", "▣", "Inbox", emails.length],
