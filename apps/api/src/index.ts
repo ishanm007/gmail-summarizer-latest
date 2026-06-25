@@ -45,7 +45,7 @@ app.use("/api", dashboardRoutes);
 
 app.get("/", (req, res) => {
   res.json({
-    message: "🚀 Gmail Summarizer API Running",
+    message: "🚀 Inbix API Running",
   });
 });
 
