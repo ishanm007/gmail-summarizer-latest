@@ -1123,29 +1123,102 @@ export default function Home() {
 
   if (authLoading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#0b1220] text-white">
-        <p className="text-indigo-100/70">Checking login...</p>
+      <main className="flex min-h-screen items-center justify-center bg-[#050513] px-4 text-white">
+        <div className="flex flex-col items-center text-center">
+          <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-[26px] border border-indigo-400/20 bg-white shadow-[0_0_45px_rgba(99,102,241,0.35)]">
+            <img
+              src="/inbix-logo.png"
+              alt="Inbix"
+              className="h-14 w-14 object-contain"
+            />
+          </div>
+
+          <p className="font-mono text-sm tracking-[0.35em] text-indigo-300">
+            CHECKING LOGIN
+          </p>
+
+          <p className="mt-3 text-sm text-indigo-200/60">
+            Preparing your AI inbox workspace...
+          </p>
+        </div>
       </main>
     );
   }
 
   if (!user) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#0b1220] px-4 text-white">
-        <div className="w-full max-w-md rounded-3xl border border-[#24214a] bg-[#111827] p-8 shadow-2xl">
-          <h1 className="text-3xl font-bold">Inbix AI</h1>
+      <main className="relative min-h-screen overflow-hidden bg-[#050513] px-4 text-white">
+        <div className="absolute left-1/2 top-[-220px] h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-blue-600/20 blur-3xl" />
+        <div className="absolute bottom-[-260px] right-[-160px] h-[520px] w-[520px] rounded-full bg-violet-600/20 blur-3xl" />
 
-          <p className="mt-3 text-indigo-300/60">
-            Connect your Gmail and get clear AI summaries of important emails.
-          </p>
+        <section className="relative mx-auto flex min-h-screen max-w-6xl flex-col items-center justify-center py-10">
+          <div className="mb-8 inline-flex items-center gap-3 rounded-full border border-indigo-500/25 bg-indigo-500/10 px-4 py-2 text-sm text-indigo-200/80">
+            <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,0.8)]" />
+            Inbix Email Assistant · v1.1 active
+          </div>
 
-          <button
-            onClick={loginWithGoogle}
-            className="mt-8 w-full rounded-3xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-500"
-          >
-            Continue with Google
-          </button>
-        </div>
+          <div className="w-full max-w-3xl rounded-[2rem] border border-indigo-500/25 bg-[#0d0c24]/90 p-6 text-center shadow-2xl shadow-indigo-950/40 backdrop-blur md:p-10">
+            <div className="mx-auto mb-7 flex h-28 w-28 items-center justify-center rounded-[34px] border border-indigo-400/20 bg-white shadow-[0_0_60px_rgba(99,102,241,0.45)]">
+              <img
+                src="/inbix-logo.png"
+                alt="Inbix"
+                className="h-20 w-20 object-contain"
+              />
+            </div>
+
+            <p className="font-mono text-xs uppercase tracking-[0.45em] text-indigo-300">
+              AI Inbox Workspace
+            </p>
+
+            <h1 className="mt-4 text-4xl font-black tracking-tight text-white md:text-6xl">
+              Understand your inbox faster.
+            </h1>
+
+            <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-indigo-200/70 md:text-lg">
+              Inbix connects to Gmail and turns long emails into clear AI
+              summaries, action items, key dates, priority signals, and saved
+              searchable insights.
+            </p>
+
+            <div className="mx-auto mt-8 grid max-w-2xl gap-3 text-left sm:grid-cols-3">
+              {[
+                ["⚡", "Fast summaries"],
+                ["📌", "Action items"],
+                ["🧠", "Smart priority"],
+              ].map(([icon, label]) => (
+                <div
+                  key={label}
+                  className="rounded-2xl border border-indigo-500/20 bg-black/20 px-4 py-3 text-sm font-semibold text-indigo-100/80"
+                >
+                  <span className="mr-2">{icon}</span>
+                  {label}
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={loginWithGoogle}
+              className="mt-9 w-full max-w-sm rounded-3xl bg-gradient-to-r from-blue-500 to-violet-600 px-6 py-4 font-bold text-white shadow-lg shadow-blue-500/25 transition hover:scale-[1.02] hover:opacity-95"
+            >
+              Continue with Google
+            </button>
+
+            <p className="mx-auto mt-4 max-w-md text-xs leading-5 text-indigo-300/55">
+              By continuing, you agree to Inbix accessing Gmail data only to
+              provide summaries and inbox assistance.
+            </p>
+
+            <div className="mt-7 flex items-center justify-center gap-4 text-sm text-indigo-300/70">
+              <a href="/privacy" className="hover:text-white">
+                Privacy Policy
+              </a>
+              <span className="text-indigo-500/50">·</span>
+              <a href="/terms" className="hover:text-white">
+                Terms
+              </a>
+            </div>
+          </div>
+        </section>
       </main>
     );
   }
