@@ -88,9 +88,9 @@ router.get("/google/callback", async (req, res) => {
 
     res.cookie("userId", user.id, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 1000 * 60 * 60 * 24 * 30,
+      secure: true,
+      sameSite: "none",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     res.redirect(process.env.FRONTEND_URL || "http://localhost:3000");
@@ -132,7 +132,11 @@ router.get("/me", async (req, res) => {
 });
 
 router.post("/logout", (req, res) => {
-  res.clearCookie("userId");
+  res.clearCookie("userId", {
+    httpOnly: true,
+    secure: true,
+    sameSite: "none",
+  });
   return res.json({ success: true, message: "Logged out" });
 });
 
